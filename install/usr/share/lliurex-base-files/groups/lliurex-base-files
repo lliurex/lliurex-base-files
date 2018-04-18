@@ -1,0 +1,8 @@
+lpadmin:x:306:
+netdev:x:308:
+saned:x:310:
+sambashare:x:312:
+vboxusers:x:314:
+epoptes:x:321:
+nbd:x:322:
+fuse:x:320:

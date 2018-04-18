@@ -1,0 +1,4 @@
+Acquire::AllowInsecureRepositories "1"; 
+APT::Get::AllowUnauthenticated "1";
+Acquire::Changelogs::URI::Origin::LliureX "http://lliurex.net/bionic/changelogs/pool/@CHANGEPATH@/changelog";
+

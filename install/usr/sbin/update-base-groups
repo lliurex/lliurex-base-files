@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -e
+
+# system groups
+GROUP_DIR="/usr/share/lliurex-base-files/groups/"
+if [ -d "$GROUP_DIR" ] ; then
+	find "$GROUP_DIR" -xtype f -exec cat {} \; |while read line ; do
+		if [ "$line" ] ; then
+			line="${line%:}"
+			lNAME="${line%%:*}"
+			lGID="${line##*:}"
+		fi
+
+		rc=0
+		cat /etc/group | grep -q $lNAME || rc=1
+		if [ $rc -eq 0 ]; then
+			groupmod -g $lGID $lNAME || true
+		else
+			addgroup --system --quiet --gid "$lGID" "$lNAME" || true
+		fi
+	done
+	# TODO: think the way to update network (ldap) groups also ...
+fi
+
+exit 0
