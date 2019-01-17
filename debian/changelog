@@ -1,3 +1,9 @@
+lliurex-base-files (19.1) bionic; urgency=high
+
+  * Adding bluetooth group
+
+ -- Hector Garcia Huerta <hectorgh@gmail.com>  Thu, 17 Jan 2019 09:37:42 +0100
+
 lliurex-base-files (19) bionic; urgency=high
 
   * First bionic version 
