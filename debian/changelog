@@ -1,3 +1,9 @@
+lliurex-base-files (19.3) bionic; urgency=high
+
+  * Fixing debian dir.
+
+ -- Hector Garcia Huerta <hectorgh@gmail.com>  Tue, 29 Jan 2019 09:26:14 +0100
+
 lliurex-base-files (19.2) bionic; urgency=high
 
   * dummy upgrade 
