@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -e
+
+
+if [ "$1" = remove ] ; then
+	
+	ORIGINAL_UPGRADE_FILE="/etc/update-manager/release-upgrades"
+        NEW_DIVERTED_FILE="/usr/share/lliurex-base-files/release-upgrades/release-upgrades.diverted"
+        PKG="lliurex-base-files"
+
+	if [ -L $ORIGINAL_UPGRADE_FILE ]; then
+
+		rm -rf $ORIGINAL_UPGRADE_FILE || true
+
+		dpkg-divert --remove --package ${PKG} --rename --divert "$NEW_DIVERTED_FILE" "$ORIGINAL_UPGRADE_FILE"
+
+
+	fi
+
+fi
+#DEBHELPER#
+
+exit 0
