@@ -1,8 +1,30 @@
-lliurex-base-files (19.01) bionic; urgency=medium
+lliurex-base-files (19.05) bionic; urgency=medium
 
   * Add script to fix language
 
- -- Raul Rodrigo Segura <raurodse@gmail.com>  Tue, 09 Jul 2019 09:51:29 +0200
+lliurex-base-files (19.4) bionic; urgency=medium
+
+  * Adding force-confnew option in apt
+
+ -- Hector Garcia Huerta <hectorgh@gmail.com>  Fri, 21 Jun 2019 11:56:03 +0200
+
+lliurex-base-files (19.3) bionic; urgency=high
+
+  * Fixing debian dir.
+
+ -- Hector Garcia Huerta <hectorgh@gmail.com>  Tue, 29 Jan 2019 09:26:14 +0100
+
+lliurex-base-files (19.2) bionic; urgency=high
+
+  * dummy upgrade 
+
+ -- Hector Garcia Huerta <hectorgh@gmail.com>  Fri, 18 Jan 2019 09:19:20 +0100
+
+lliurex-base-files (19.1) bionic; urgency=high
+
+  * Adding bluetooth group
+
+ -- Hector Garcia Huerta <hectorgh@gmail.com>  Thu, 17 Jan 2019 09:37:42 +0100
 
 lliurex-base-files (19) bionic; urgency=high
 
