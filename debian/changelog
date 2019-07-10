@@ -1,6 +1,14 @@
+lliurex-base-files (19.06) bionic; urgency=medium
+
+  * Refactorize
+
+ -- Raul Rodrigo Segura <raurodse@gmail.com>  Wed, 10 Jul 2019 11:40:37 +0200
+
 lliurex-base-files (19.05) bionic; urgency=medium
 
   * Add script to fix language
+
+ -- Raul Rodrigo Segura <raurodse@gmail.com>  Wed, 10 Jul 2019 11:40:37 +0200
 
 lliurex-base-files (19.4) bionic; urgency=medium
 
