@@ -1,0 +1,4 @@
+# This file is sourced by Xsession(5), not executed.
+
+# Fix LANG and LANGUAGE values if selected from kde language tool
+/usr/bin/locale-fixer
