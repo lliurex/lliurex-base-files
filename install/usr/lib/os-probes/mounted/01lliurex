@@ -1,0 +1,62 @@
+#!/bin/sh
+# Test for LSB systems.
+set -e
+
+. /usr/share/os-prober/common.sh
+
+
+partition="$1"
+dir="$2"
+type="$3"
+
+version=""
+flavour=""
+if [ ! -e "$dir/usr/bin/lliurex-version" ]; then
+	exit 1
+fi
+
+if [ -e "$dir/usr/share/doc/lliurex-version-timestamp/changelog.gz" ]; then
+	commandreader=$(file "$dir/usr/share/doc/lliurex-version-timestamp/changelog.gz"| grep -q gzip && echo "zcat" || echo "cat")
+	version="$($commandreader "$dir/usr/share/doc/lliurex-version-timestamp/changelog.gz" | head -1 | awk '{print $2}')"
+elif [ -e "$dir/usr/share/doc/lliurex-cdd-edu-gdesktop/changelog.gz" ]; then
+	commandreader=$(file "$dir/usr/share/doc/lliurex-cdd-edu-gdesktop/changelog.gz"| grep -q gzip && echo "zcat" || echo "cat")
+	version="$(zcat "$dir/usr/share/doc/lliurex-cdd-edu-gdesktop/changelog.gz" | head -1 | awk '{print $2}')"
+fi
+version="$(echo $version | sed -e "s%[)(]%%g"| cut -d '.' -f1)"
+list_names=$(find /usr/share/lliurex-cdd/ -type f -exec cat {} \; | sort -u | tr "\n" " ")
+
+case "$list_names" in
+        *"server"*)
+                flavour="server"
+                break;;
+	*"client"*)
+		flavour="client"
+		break;;
+	*"music"*)
+		flavour="music"
+		break;;
+	*"infantil"*)
+		flavour="infantil"
+		break;;
+	*"biblio"*)
+		flavour="biblio"
+		break;;
+	*"pime"*)
+		flavour="pime"
+		break;;
+	*"lite"*)
+		flavour="lite"
+		break;;
+        *"desktop"*)
+                flavour="desktop"
+                break;;
+        *)
+                flavour=""
+                ;;
+esac
+
+
+
+label="LliureX"
+long="$version $flavour"
+result "$partition:$long:$label:linux"
