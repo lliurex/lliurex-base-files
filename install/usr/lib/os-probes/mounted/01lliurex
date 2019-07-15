@@ -58,5 +58,5 @@ esac
 
 
 label="LliureX"
-long="$version $flavour"
+long="$label $version $flavour"
 result "$partition:$long:$label:linux"
