@@ -2,6 +2,7 @@
 
 import os
 import re
+import argparse
 
 class FixLanguage:
     def __init__(self,home):
@@ -49,5 +50,11 @@ class FixLanguage:
             
             
 if __name__ == "__main__":
-    app = FixLanguage(os.environ['HOME'])
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f')
+    arguments = vars(parser.parse_args())
+    if '-f' in arguments.keys():
+        app = FixLanguage(arguments['-f'])
+    else:
+        app = FixLanguage(os.environ['HOME'])
     app.run()
