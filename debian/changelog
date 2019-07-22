@@ -1,3 +1,9 @@
+lliurex-base-files (19.07.2) bionic; urgency=medium
+
+  * Add argument to locale-fixer to indicate home path
+
+ -- Raul Rodrigo Segura <raurodse@gmail.com>  Mon, 22 Jul 2019 09:04:54 +0200
+
 lliurex-base-files (19.07.1) bionic; urgency=medium
 
   * Add executable bit to os-prober script
