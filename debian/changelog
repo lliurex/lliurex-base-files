@@ -1,3 +1,9 @@
+lliurex-base-files (19.07.3) bionic; urgency=medium
+
+  * Fix typo
+
+ -- Raul Rodrigo Segura <raurodse@gmail.com>  Tue, 23 Jul 2019 13:41:30 +0200
+
 lliurex-base-files (19.07.2) bionic; urgency=medium
 
   * Add argument to locale-fixer to indicate home path
