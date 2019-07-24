@@ -1,3 +1,9 @@
+lliurex-base-files (19.07.5) bionic; urgency=medium
+
+  * Remove added languages
+
+ -- Raul Rodrigo Segura <raurodse@gmail.com>  Wed, 24 Jul 2019 13:30:30 +0200
+
 lliurex-base-files (19.07.4) bionic; urgency=medium
 
   * Fix bug on fixer-locale on desktop flavour
