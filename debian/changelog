@@ -1,3 +1,9 @@
+lliurex-base-files (19.07.4) bionic; urgency=medium
+
+  * Fix bug on fixer-locale on desktop flavour
+
+ -- Raul Rodrigo Segura <raurodse@gmail.com>  Wed, 24 Jul 2019 13:14:41 +0200
+
 lliurex-base-files (19.07.3) bionic; urgency=medium
 
   * Fix typo
