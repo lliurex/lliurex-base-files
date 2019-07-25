@@ -52,7 +52,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-f')
     arguments = vars(parser.parse_args())
-        if arguments['f'] != None:
+    if arguments['f'] != None:
         app = FixLanguage(arguments['f'])
     else:
         app = FixLanguage(os.environ['HOME'])
