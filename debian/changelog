@@ -1,3 +1,9 @@
+lliurex-base-files (19.07.6) bionic; urgency=medium
+
+  * Fix tab
+
+ -- Raul Rodrigo Segura <raurodse@gmail.com>  Thu, 25 Jul 2019 09:02:42 +0200
+
 lliurex-base-files (19.07.5) bionic; urgency=medium
 
   * Remove added languages
