@@ -1,3 +1,9 @@
+lliurex-base-files (19.08) bionic; urgency=medium
+
+  * Replace LANG=ca_ES.UTF-8@valencia by LANG=ca_ES.utf8@valencia
+
+ -- Raul Rodrigo Segura <raurodse@gmail.com>  Tue, 27 Aug 2019 13:06:23 +0200
+
 lliurex-base-files (19.07.6) bionic; urgency=medium
 
   * Fix tab
