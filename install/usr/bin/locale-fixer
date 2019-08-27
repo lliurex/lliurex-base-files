@@ -24,7 +24,7 @@ class FixLanguage:
         if self.languages[0] == 'es':
             self.lang = 'es_ES.UTF-8'
         elif self.languages[0] == 'ca@valencia':
-            self.lang = 'ca_ES.UTF-8@valencia'
+            self.lang = 'ca_ES.utf8@valencia'
 
     def is_need_fix(self):
         return self.languages[0] in self.language_to_fix
