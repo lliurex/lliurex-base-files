@@ -21,23 +21,23 @@ from subprocess import check_output
 ltsConfFile="/etc/lts.conf"
 
 def detect_live():
-    test1=False
+    #test1=False
     test2=False
     test3=False
 
     if os.path.isdir('/rofs'):
-        r1=re.compile('^tmpfs\s/cow\stmpfs')
-        r2=re.compile('^/cow\s/\soverlayfs')
+        #r1=re.compile('^tmpfs\s/cow\stmpfs')
+        r2=re.compile('^/cow\s/\soverlay')
         r3=re.compile('^/dev/loop0\s/rofs\ssquashfs')
         with open('/proc/mounts') as mounts_file:
             for line in mounts_file.readlines():
-                if r1.match(line):
-                    test1=True
+                #if r1.match(line):
+                #    test1=True
                 if r2.match(line):
                     test2=True
                 if r3.match(line):
                     test3=True
-    if test1 and test2 and test3:
+    if test2 and test3:
         pass
     else:
         raise Exception('Not live')
