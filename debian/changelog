@@ -1,3 +1,9 @@
+lliurex-base-files (19.09) bionic; urgency=medium
+
+  * Lliurex-version: Fix live detection
+
+ -- M.Angel Juan <m.angel.juan@gmail.com>  Wed, 06 Nov 2019 15:57:09 +0100
+
 lliurex-base-files (19.08) bionic; urgency=medium
 
   * Replace LANG=ca_ES.UTF-8@valencia by LANG=ca_ES.utf8@valencia
