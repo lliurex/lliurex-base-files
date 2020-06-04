@@ -326,6 +326,10 @@ def store_result(results='',namevar='',action='store'):
                     result['CLIENT']='yes'
                 elif 'DESKTOP' in [ x.upper() for x in results ] and 'EDU' in [ x.upper() for x in results ]:
                     result['DESKTOP']='yes'
+                elif '-LITE' in res.upper():
+                    part = res.split('-')
+                    if part and isinstance(part,list) and len(part) > 1:
+                        result[part[0].upper()]='yes'
                 else:
                     result[res.upper()]='yes'
             else:
