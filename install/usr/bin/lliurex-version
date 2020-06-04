@@ -216,7 +216,7 @@ def check_mirror():
     #                'dists':['xenial','xenial-security','xenial-updates'],
     #                'lists':[('regexp','.*xenial.*_amd64_Packages$'),('regexp','.*xenial.*_i386_Packages$')]}
 
-    need_structure={'pool':[{'main':{'l/lliurex-version-timestamp':('regexp','lliurex-version-timestamp_.*\.deb$')}},'universe','multiverse','preschool','restricted'],
+    need_structure={'pool':[{'main':{'l/lliurex-version-timestamp':('regexp','lliurex-version-timestamp_.*\.deb$')}},'universe','multiverse','restricted'],
                     'dists':['bionic','bionic-security','bionic-updates']}
     try:
         return os.path.isdir(mirror_location) and check_structure(mirror_location,need_structure)
@@ -326,6 +326,10 @@ def store_result(results='',namevar='',action='store'):
                     result['CLIENT']='yes'
                 elif 'DESKTOP' in [ x.upper() for x in results ] and 'EDU' in [ x.upper() for x in results ]:
                     result['DESKTOP']='yes'
+                elif '-LITE' in res.upper():
+                    part = res.split('-')
+                    if part and isinstance(part,list) and len(part) > 1:
+                        result[part[0].upper()]='yes'
                 else:
                     result[res.upper()]='yes'
             else:
