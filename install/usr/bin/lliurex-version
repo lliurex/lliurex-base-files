@@ -216,7 +216,7 @@ def check_mirror():
     #                'dists':['xenial','xenial-security','xenial-updates'],
     #                'lists':[('regexp','.*xenial.*_amd64_Packages$'),('regexp','.*xenial.*_i386_Packages$')]}
 
-    need_structure={'pool':[{'main':{'l/lliurex-version-timestamp':('regexp','lliurex-version-timestamp_.*\.deb$')}},'universe','multiverse','preschool','restricted'],
+    need_structure={'pool':[{'main':{'l/lliurex-version-timestamp':('regexp','lliurex-version-timestamp_.*\.deb$')}},'universe','multiverse','restricted'],
                     'dists':['bionic','bionic-security','bionic-updates']}
     try:
         return os.path.isdir(mirror_location) and check_structure(mirror_location,need_structure)
