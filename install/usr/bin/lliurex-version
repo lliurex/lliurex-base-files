@@ -206,7 +206,7 @@ def check_mirror():
     #
     # Run checks against mirror
     #
-    mirror_location='/net/mirror/llx19'
+    mirror_location='/net/mirror/llx21'
     #dict = check keys & recurse into values
     #list = check items
     #tuple = check items(files or regexp) ; syntax=('type','value') where type = 'regexp' or something else to exact match
@@ -217,7 +217,7 @@ def check_mirror():
     #                'lists':[('regexp','.*xenial.*_amd64_Packages$'),('regexp','.*xenial.*_i386_Packages$')]}
 
     need_structure={'pool':[{'main':{'l/lliurex-version-timestamp':('regexp','lliurex-version-timestamp_.*\.deb$')}},'universe','multiverse','restricted'],
-                    'dists':['bionic','bionic-security','bionic-updates']}
+                    'dists':['focal','focal-security','focal-updates']}
     try:
         return os.path.isdir(mirror_location) and check_structure(mirror_location,need_structure)
     except Exception as e:
