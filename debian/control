@@ -2,7 +2,7 @@ Source: lliurex-base-files
 Section: admin
 Priority: important
 Maintainer: Equipo LliureX <lliurex@gva.es> 
-Build-Depends: debhelper-compat (>= 10)
+Build-Depends: debhelper (>= 10)
 Standards-Version: 4.4.1
 Homepage: http://lliurex.net
 #Vcs-Git: https://gitlab.com/gaticos/lliurex-base-files.git
