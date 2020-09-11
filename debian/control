@@ -9,7 +9,8 @@ Homepage: http://lliurex.net
 
 Package: lliurex-base-files
 Architecture: all
-Depends: ${shlibs:Depends}, ${misc:Depends}, python, adduser, lliurex-version-timestamp
+#Depends: ${shlibs:Depends}, ${misc:Depends}, python, adduser, lliurex-version-timestamp
+Depends: ${shlibs:Depends}, ${misc:Depends}, python3, adduser
 Description: LliureX base system miscellaneous files
  lliurex-base-file installs the absolute minimal custom files
  required for LliureX. "Lliurexification" starts here.
