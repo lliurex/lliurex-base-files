@@ -1,3 +1,10 @@
+lliurex-base-files (20.09.02) focal; urgency=medium
+
+  * Add preserve_env for sudo look&feel consistency
+  
+
+ -- Juanma1980 <juanma1980@gmail.com>  Wed, 09 Jun 2021 12:01:40 +0200
+
 lliurex-base-files (20.09.01) focal; urgency=medium
 
   * temporal version 
