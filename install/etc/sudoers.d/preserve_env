@@ -1,0 +1,2 @@
+#Preserver some environment variables by default for look&feel consistency
+Defaults env_keep += "KDE_FULL_SESSION"
