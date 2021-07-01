@@ -1,2 +1,2 @@
 #Preserver some environment variables by default for look&feel consistency
-Defaults env_keep += "KDE_FULL_SESSION"
+Defaults env_keep += "KDE_FULL_SESSION XDG_CONFIG_DIRS"
