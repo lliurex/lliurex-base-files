@@ -13,12 +13,15 @@ import codecs
 import pwd,grp
 import argparse
 import re
+import json
 # import glob  # Commented: python 3.5 is not available on lliurex 15
 import fnmatch # allows search recursively without glob
 
 from subprocess import check_output
 
 ltsConfFile="/etc/lts.conf"
+LLIUREX_VERSION_NUMBER="21"
+LLIUREX_VERSION_CODENAME="focal"
 
 def detect_live():
     #test1=False
@@ -202,11 +205,44 @@ def detect_user(user=''):
     return ret
 #def detect_user():
 
+def check_mirror_llxvar():
+    ret = {}
+    try:
+        try:
+            with open('/var/lib/n4d/variables/LLIUREXMIRROR','r') as fp:
+                content = json.load(fp)
+        except Exception as e:
+            with open('/var/lib/n4d/variables-dir/LLIUREXMIRROR','r') as fp:
+                content = json.load(fp)
+        content = content.get('LLIUREXMIRROR',{}).get('value',{}).get('llx{}'.format(LLIUREX_VERSION_NUMBER),{})
+        if content:
+            ret.setdefault('status',content.get('status_mirror'))
+            ret.setdefault('size',content.get('mirror_size'))
+            ret.setdefault('progress',content.get('progress'))
+            ret.setdefault('last_update',content.get('last_mirror_date'))
+        return ret
+    except Exception as e:
+        print('Error reading LLIUREXMIRROR llxvar, {}'.format(e))
+        return "{'status':'Error','size':'Error','progress':'Error','last_update':'Error'}"
+
+def check_mirror_timestamp():
+    try:
+        reg = 'lliurex-version-timestamp_[0-9]{2}\.([0-9]+)_[^.]*\.deb$'
+        for f in os.listdir('/net/mirror/llx{}/pool/main/l/lliurex-version-timestamp/'.format(LLIUREX_VERSION_NUMBER)):
+            m = re.findall(reg,f)
+            if m:
+                timestamp = m[0]
+                timestamp = "{}/{}/20{}".format(timestamp[4:6],timestamp[2:4],timestamp[0:2])
+                return timestamp
+    except Exception as e:
+        print("Error checking mirror timestamp, {}".format(e))
+        return 'Error'
+
 def check_mirror():
     #
     # Run checks against mirror
     #
-    mirror_location='/net/mirror/llx21'
+    mirror_location='/net/mirror/llx{}'.format(LLIUREX_VERSION_NUMBER)
     #dict = check keys & recurse into values
     #list = check items
     #tuple = check items(files or regexp) ; syntax=('type','value') where type = 'regexp' or something else to exact match
@@ -217,7 +253,7 @@ def check_mirror():
     #                'lists':[('regexp','.*xenial.*_amd64_Packages$'),('regexp','.*xenial.*_i386_Packages$')]}
 
     need_structure={'pool':[{'main':{'l/lliurex-version-timestamp':('regexp','lliurex-version-timestamp_.*\.deb$')}},'universe','multiverse','restricted'],
-                    'dists':['focal','focal-security','focal-updates']}
+                    'dists':['{}'.format(LLIUREX_VERSION_CODENAME.lower()),'{}-security'.format(LLIUREX_VERSION_CODENAME.lower()),'{}-updates'.format(LLIUREX_VERSION_CODENAME.lower())]}
     try:
         return os.path.isdir(mirror_location) and check_structure(mirror_location,need_structure)
     except Exception as e:
@@ -404,6 +440,7 @@ def store_result(results='',namevar='',action='store'):
 parser = argparse.ArgumentParser(description='Get information about running environment')
 parser.add_argument('-a','--all',metavar='',action='store_const',help='Get all information',const=True)
 parser.add_argument('-m','--mirror',metavar='',action='store_const',help='Check mirror available',const=True)
+parser.add_argument('-mv','--mirror-version',metavar='',action='store_const',help='Get mirror information',const=True)
 parser.add_argument('-e','--eval',metavar='',action='store_const',help='Show all information to evaluate in bash variables',const=True)
 parser.add_argument('-s','--session',metavar='',action='store_const',help='Get current session type',const=True)
 parser.add_argument('-f','--flavour',metavar='',action='store_const',help='Get the flavour of current system',const=True)
@@ -454,8 +491,13 @@ try:
         store_result(detect_flavour(),'FLAVOUR')
     if args_all or args.usertype != None:
         store_result(detect_user(args.usertype),'USERTYPE')
-    if args_all or args.mirror != None:
+    if args_all or args.mirror != None or args.mirror_version:
         store_result(str(check_mirror()),'MIRROR')
+    if args_all or args.mirror_version != None:
+        store_result("MIRROR_VERSION_TIMESTAMP={}".format(check_mirror_timestamp()),'MIRROR_TIMESTAMP')
+        llxvar_mirror = check_mirror_llxvar()
+        if llxvar_mirror:
+            store_result("STATUS={status},PROGRESS={progress},SIZE={size},LAST_UPDATE_CHECK={last_update}".format(**llxvar_mirror),'MIRROR_LLXVAR')
 
 #lliurex version options
     if args.number != None:
