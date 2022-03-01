@@ -1,3 +1,9 @@
+lliurex-base-files (21.06.22) focal; urgency=medium
+
+  * Add mirror information to lliurex-version
+
+ -- M.Angel Juan <m.angel.juan@gmail.com>  Tue, 01 Mar 2022 13:30:32 +0100
+
 lliurex-base-files (21.06.21.3) focal; urgency=medium
 
   * Adding lliurex-version-timestamp dependency
