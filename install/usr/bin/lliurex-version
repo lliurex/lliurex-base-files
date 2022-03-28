@@ -222,8 +222,9 @@ def check_mirror_llxvar():
             ret.setdefault('last_update',content.get('last_mirror_date'))
         return ret
     except Exception as e:
-        print('Error reading LLIUREXMIRROR llxvar, {}'.format(e))
-        return "{'status':'Error','size':'Error','progress':'Error','last_update':'Error'}"
+        sys.stderr.write('Error reading LLIUREXMIRROR llxvar, {}\n'.format(e))
+        sys.stderr.flush()
+        return {'status':'Error','size':'Error','progress':'Error','last_update':'Error'}
 
 def check_mirror_timestamp():
     try:
@@ -235,7 +236,8 @@ def check_mirror_timestamp():
                 timestamp = "{}/{}/20{}".format(timestamp[4:6],timestamp[2:4],timestamp[0:2])
                 return timestamp
     except Exception as e:
-        print("Error checking mirror timestamp, {}".format(e))
+        sys.stderr.write("Error checking mirror timestamp, {}\n".format(e))
+        sys.stderr.flush()
         return 'Error'
 
 def check_mirror():
