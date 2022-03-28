@@ -1,3 +1,10 @@
+lliurex-base-files (21.06.23) focal; urgency=medium
+
+  * Fix error when no mirror is found
+  * Fix error when sourcing into bash session
+
+ -- M.Angel Juan <m.angel.juan@gmail.com>  Mon, 28 Mar 2022 13:12:33 +0200
+
 lliurex-base-files (21.06.22) focal; urgency=medium
 
   * Add mirror information to lliurex-version
