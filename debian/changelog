@@ -1,3 +1,9 @@
+lliurex-base-files (21.07) focal; urgency=medium
+
+  * Change ctype to fix problem with accent mark 
+
+ -- Raul Rodrigo Segura <raurodse@gmail.com>  Fri, 23 Jun 2023 08:56:19 +0200
+
 lliurex-base-files (21.06.23) focal; urgency=medium
 
   * Fix error when no mirror is found
