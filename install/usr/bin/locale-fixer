@@ -33,6 +33,7 @@ class FixLanguage:
     def write_file(self):
         self.config['Translations']['LANGUAGE'] = ':'.join(self.languages)
         self.config['Formats']['LANG'] = self.lang
+        self.config['Formats']['LC_CTYPE'] = self.lang.split("@")[0]
         with open(self.path_language, 'w', encoding='utf-8') as fd:
             self.config.write(fd)
 
