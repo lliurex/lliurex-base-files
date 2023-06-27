@@ -16,10 +16,45 @@ class FixLanguage:
         if os.path.exists(self.path_language):
             with open(self.path_language, 'r', encoding='utf-8') as fd:
                 self.config.read_file(fd)
-            if 'Translations' in self.config and 'LANGUAGE' in self.config['Translations']:
+            if 'Translations' not in self.config:
+                self.config.add_section('Translations')
+            if 'Formats' not in self.config:
+                self.config.add_section('Formats')
+
+            if 'LANGUAGE' in self.config['Translations'] and self.config["Translations"]["LANGUAGE"] != "":
                 self.languages = self.config['Translations']['LANGUAGE'].split(':')
-                return 
-        self.languages = list()   
+                return
+            else:
+                if 'Formats' in self.config and 'LANG' in self.config['Formats']:
+                    self.languages = self.get_language_from_lang(self.config['Formats']['LANG'])
+                    return 
+                else:
+                    self.languages = self.get_lang_from_locale_file()
+                    return
+        else:
+            self.config.add_section("Translations")
+            self.config.add_section("Formats")
+            self.languages = self.get_lang_from_locale_file()
+            return 
+        self.languages = list()
+
+    def get_language_from_lang(self, lang):
+            if lang.startswith("es"):
+                return ["es"]
+            if lang.find("@valencia") > 0:
+                return ["ca@valencia"]
+            return []
+
+
+    def get_lang_from_locale_file(self):
+        if os.path.exists("/etc/default/locale"):
+            fd = open('/etc/default/locale',"r")
+            options = list( map( lambda x : x.strip(), fd.readlines()))
+            for line_option in options:
+                if line_option.startswith("LANG="):
+                    value = line_option[len("LANG="):]
+                    return self.get_language_from_lang(value)
+        return []
 
     def generate_lang_and_language(self):
         if self.languages[0] == 'es':
@@ -38,11 +73,10 @@ class FixLanguage:
             self.config.write(fd)
 
     def run(self):
-        if os.path.exists(self.path_language):
-            self.parse_file()
-            if len(self.languages) > 0 and self.is_need_fix():
-                self.generate_lang_and_language()
-                self.write_file()
+        self.parse_file()
+        if len(self.languages) > 0 and self.is_need_fix():
+            self.generate_lang_and_language()
+            self.write_file()
             
             
 if __name__ == "__main__":
