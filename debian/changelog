@@ -1,3 +1,9 @@
+lliurex-base-files (21.08) focal; urgency=medium
+
+  * Set LANGUAGES variable on plasma-localerc when load session by sddm
+
+ -- Raul Rodrigo Segura <raurodse@gmail.com>  Tue, 27 Jun 2023 16:00:43 +0200
+
 lliurex-base-files (21.07) focal; urgency=medium
 
   * Change ctype to fix problem with accent mark 
