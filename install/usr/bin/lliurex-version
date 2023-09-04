@@ -228,13 +228,17 @@ def check_mirror_llxvar():
 
 def check_mirror_timestamp():
     try:
-        reg = 'lliurex-version-timestamp_[0-9]{2}\.([0-9]+)_[^.]*\.deb$'
-        for f in os.listdir('/net/mirror/llx{}/pool/main/l/lliurex-version-timestamp/'.format(LLIUREX_VERSION_NUMBER)):
-            m = re.findall(reg,f)
-            if m:
-                timestamp = m[0]
-                timestamp = "{}/{}/20{}".format(timestamp[4:6],timestamp[2:4],timestamp[0:2])
-                return timestamp
+        if check_mirror == True:
+            reg = 'lliurex-version-timestamp_[0-9]{2}\.([0-9]+)_[^.]*\.deb$'
+            for f in os.listdir('/net/mirror/llx{}/pool/main/l/lliurex-version-timestamp/'.format(LLIUREX_VERSION_NUMBER)):
+                m = re.findall(reg,f)
+                if m:
+                    timestamp = m[0]
+                    timestamp = "{}/{}/20{}".format(timestamp[4:6],timestamp[2:4],timestamp[0:2])
+        else:
+            timestamp = 'No mirror done'
+
+        return timestamp
     except Exception as e:
         sys.stderr.write("Error checking mirror timestamp, {}\n".format(e))
         sys.stderr.flush()
@@ -496,10 +500,14 @@ try:
     if args_all or args.mirror != None or args.mirror_version:
         store_result(str(check_mirror()),'MIRROR')
     if args_all or args.mirror_version != None:
-        store_result("MIRROR_VERSION_TIMESTAMP={}".format(check_mirror_timestamp()),'MIRROR_TIMESTAMP')
-        llxvar_mirror = check_mirror_llxvar()
-        if llxvar_mirror:
-            store_result("STATUS={status},PROGRESS={progress},SIZE={size},LAST_UPDATE_CHECK={last_update}".format(**llxvar_mirror),'MIRROR_LLXVAR')
+        check_mirror_timestamp_solved=check_mirror_timestamp()
+        store_result("MIRROR_VERSION_TIMESTAMP={}".format(check_mirror_timestamp_solved),'MIRROR_TIMESTAMP')
+        if check_mirror_timestamp_solved == 'No mirror done':
+            pass
+        else:
+            llxvar_mirror = check_mirror_llxvar()
+            if llxvar_mirror:
+                store_result("STATUS={status},PROGRESS={progress},SIZE={size},LAST_UPDATE_CHECK={last_update}".format(**llxvar_mirror),'MIRROR_LLXVAR')
 
 #lliurex version options
     if args.number != None:
