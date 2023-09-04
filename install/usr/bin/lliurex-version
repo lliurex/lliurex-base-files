@@ -20,8 +20,8 @@ import fnmatch # allows search recursively without glob
 from subprocess import check_output
 
 ltsConfFile="/etc/lts.conf"
-LLIUREX_VERSION_NUMBER="21"
-LLIUREX_VERSION_CODENAME="focal"
+LLIUREX_VERSION_NUMBER="23"
+LLIUREX_VERSION_CODENAME="jammy"
 
 def detect_live():
     #test1=False
