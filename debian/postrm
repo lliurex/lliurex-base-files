@@ -23,10 +23,11 @@ ORIGINAL_XDG_USER_DIRS_AUTOSTART="/etc/xdg/autostart/xdg-user-dirs.desktop"
 NEW_DIVERTED_FILE="/etc/xdg/autostart/xdg-user-dirs.desktop.old"
 
 case "$1" in
-	purge|remove)
+    purge|remove)
 		dpkg-divert --remove --package ${PKG} --rename --divert "$NEW_DIVERTED_FILE" "$ORIGINAL_XDG_USER_DIRS_AUTOSTART" || true
-	upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
-    ;;
+	;;
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+	;;
 
     *)
         echo "postrm called with unknown argument \`$1'" >&2

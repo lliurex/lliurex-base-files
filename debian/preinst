@@ -21,9 +21,10 @@ case "$1" in
     install|upgrade)
 	rc=0
 	dpkg-divert --list | grep $PKG | grep -q xdg-user-dirs.desktop && rc=1 || rc=0
-	if [[ "$rc" == "0" ]]; then
+
+	if [ "$rc" = "0" ] ; then
 		dpkg-divert --add --package ${PKG} --rename --divert "$NEW_DIVERTED_FILE" "$ORIGINAL_XDG_USER_DIRS_AUTOSTART"
-	then
+	fi
     ;;
 
     abort-upgrade)
