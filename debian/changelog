@@ -1,4 +1,4 @@
-lliurex-base-files (23.01) ; urgency=medium
+lliurex-base-files (23.01) jammy; urgency=medium
 
   * Add xdg-user-dirs wrapper to create folders 
 
