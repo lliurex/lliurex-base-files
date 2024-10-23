@@ -24,6 +24,7 @@ case "$1" in
 
 	if [ "$rc" = "0" ] ; then
 		dpkg-divert --add --package ${PKG} --rename --divert "$NEW_DIVERTED_FILE" "$ORIGINAL_XDG_USER_DIRS_AUTOSTART"
+		dpkg-divert --add --package ${PKG} --rename --divert "/etc/apt/neon_config_preferences" "/etc/apt/preferences.d/99-noble-overrides"
 	fi
     ;;
 

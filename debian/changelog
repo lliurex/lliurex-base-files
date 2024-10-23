@@ -1,3 +1,9 @@
+lliurex-base-files (25.02) noble; urgency=medium
+
+  * Add diversion to neon apt config 
+
+ -- Raul Rodrigo Segura <raurodse@gmail.com>  Wed, 23 Oct 2024 17:44:50 +0200
+
 lliurex-base-files (25.01) noble; urgency=medium
 
   * Initial release for Noble
