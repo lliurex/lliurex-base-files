@@ -1,3 +1,9 @@
+lliurex-base-files (25.04) noble; urgency=medium
+
+  * Add nopasswdlogin group and enable login without password
+
+ -- Raul Rodrigo Segura <raurodse@gmail.com>  Mon, 28 Jul 2025 14:00:37 +0200
+
 lliurex-base-files (25.03) noble; urgency=medium
 
   * Remove diversion 
