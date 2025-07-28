@@ -7,3 +7,4 @@ epoptes:x:321:
 fuse:x:320:
 nbd:x:322:
 bluetooth:x:324:
+nopasswdlogin:x:350:

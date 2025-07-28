@@ -1,0 +1,6 @@
+Name: No password Login - Enable login without validation password to nopasswdlogin memmbers
+Default: yes
+Priority: 700
+Auth-Type: Primary
+Auth:
+	[success=end default=ignore] pam_succeed_if.so user ingroup nopasswdlogin
