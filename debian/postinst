@@ -41,6 +41,7 @@ case "$1" in
 	if [ -e "/etc/apt/apt.conf.d/99lliurex" ]; then
 		rm -rf "/etc/apt/apt.conf.d/99lliurex" || true 
 	fi
+	pam-auth-update --force --package lliurex-base-files
 
    ;;
    abort-upgrade|abort-remove|abort-deconfigure)
