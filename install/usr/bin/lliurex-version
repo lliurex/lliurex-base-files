@@ -40,6 +40,17 @@ LLIUREX_VERSION_NUMBER = "25"
 LLIUREX_VERSION_CODENAME = "noble"
 ROFS_DIR = Path("/rofs")
 MIRROR_BASE_PATH = Path(f"/net/mirror/llx{LLIUREX_VERSION_NUMBER}")
+INCLUDES_FILE_PATHS = [
+    Path('./includes'),
+    Path('/etc/lliurex-version/includes')
+]
+EXCLUDES_FILE_PATHS = [
+    Path('./excludes'),
+    Path('/etc/lliurex-version/excludes')
+]
+TAGS_DIRECTORY = Path('/etc/lliurex-auto-upgrade/tags')
+DEFAULT_TAG_PREFIX = 'tag:'
+DEFAULT_PACKAGE_PREFIX = ''
 
 class NotLiveSystemError(Exception):
     pass
@@ -433,6 +444,179 @@ def check_mirror() -> bool:
         logger.error(f"Error in check_mirror: {e}")
     return False
 
+def _read_filter_file(file_path: Path) -> List[re.Pattern]:
+    '''
+    Read filter file and return compiled regex patterns excluding lines starting with '#' or empty.
+    '''
+    patterns = []
+
+    if not file_path.exists():
+        logger.debug(f'Filter file not found: {file_path}')
+        return patterns
+
+    try:
+        with file_path.open('r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+
+                if not line or line.startswith('#'):
+                    continue
+
+                try:
+                    pattern = re.compile(line)
+                    patterns.append(pattern)
+                except re.error as e:
+                    logger.warning(f'Invalid regex in {file_path} line {line_num}: {line} - {e}')
+                    continue
+
+    except (OSError, IOError) as e:
+        logger.error(f'Error reading filter file {file_path}: {e}')
+        return []
+
+    logger.debug(f'Loaded {len(patterns)} patterns from {file_path}')
+    return patterns
+
+def _find_filter_file(paths: List[Path]) -> Optional[Path]:
+    '''
+    Find first existing filter file from list of paths.
+    '''
+    for path in paths:
+        if path.exists() and path.is_file():
+            logger.debug(f"Found filter file: {path}")
+            return path
+
+    logger.debug(f"No filter file found in: {paths}")
+    return None
+
+def get_installed_packages() -> List[Tuple[str, str]]:
+    '''
+    Get list of installed packages with versions using dpkg-query
+    '''
+    try:
+        output = check_output(
+            ['dpkg-query', '-W', '-f=${Package} ${Version}\n'],
+            stderr=DEVNULL
+        ).decode('utf-8')
+
+        packages = []
+        for line in output.strip().split('\n'):
+            if not line.strip():
+                continue
+
+            parts = line.split(None, 1)
+            if len(parts) == 2:
+                packages.append((parts[0], parts[1]))
+
+        packages.sort(key=lambda x: x[0].lower())
+
+        logger.debug(f"Found {len(packages)} installed packages")
+        return packages
+
+    except Exception as e:
+        logger.error(f"Error getting package list with dpkg-query: {e}")
+        return []
+
+def filter_packages(packages: List[Tuple[str, str]], includes: List[re.Pattern], excludes: List[re.Pattern]) -> List[Tuple[str, str]]:
+    '''
+    Filter packages based on rules from files
+    '''
+    if not includes and not excludes:
+        return packages
+
+    filtered = []
+
+    for pkg_name, pkg_version in packages:
+        matches_include = any(pattern.search(pkg_name) for pattern in includes) if includes else False
+        matches_exclude = any(pattern.search(pkg_name) for pattern in excludes) if excludes else False
+
+        if matches_include and matches_exclude:
+            filtered.append((pkg_name, pkg_version))
+        elif matches_include:
+            filtered.append((pkg_name, pkg_version))
+        elif matches_exclude:
+            pass
+        else:
+            filtered.append((pkg_name, pkg_version))
+
+    logger.debug(f"Filtered {len(packages)} packages to {len(filtered)}")
+    return filtered
+
+def list_packages(includes_file: Optional[Path] = None, excludes_file: Optional[Path] = None) -> List[str]:
+    '''
+    List filtered installed packages
+    '''
+    if includes_file is None:
+        includes_file = _find_filter_file(INCLUDES_FILE_PATHS)
+
+    if excludes_file is None:
+        excludes_file = _find_filter_file(EXCLUDES_FILE_PATHS)
+
+    includes = _read_filter_file(includes_file) if includes_file else []
+    excludes = _read_filter_file(excludes_file) if excludes_file else []
+
+    packages = get_installed_packages()
+
+    filtered = filter_packages(packages, includes, excludes)
+
+    result = [f"{name} {version}" for name, version in filtered]
+
+    return result
+
+def list_tags() -> List[str]:
+    '''
+    List system tags from lliurex-auto-upgrade dir
+    '''
+    try:
+        if not TAGS_DIRECTORY.exists():
+            logger.warning(f'Tags directory not found: {TAGS_DIRECTORY}')
+            return []
+
+        if not TAGS_DIRECTORY.is_dir():
+            logger.error(f'Tags path is not a directory: {TAGS_DIRECTORY}')
+            return []
+
+        tags = []
+        for item in TAGS_DIRECTORY.iterdir():
+            if item.is_file():
+                tags.append(item.name)
+
+        tags.sort(key=str.lower)
+
+        logger.debug(f'Found {len(tags)} tags')
+        return tags
+
+    except Exception as e:
+        logger.error(f'Error reading tags directory: {e}')
+        return []
+
+def list_packages_and_tags(
+    includes_file: Optional[Path] = None,
+    excludes_file: Optional[Path] = None,
+    tag_prefix: str = DEFAULT_TAG_PREFIX,
+    package_prefix: str = DEFAULT_PACKAGE_PREFIX
+) -> List[str]:
+    '''
+    List both tags and packages with optional prefix
+    '''
+    tags = list_tags()
+    packages = list_packages(includes_file, excludes_file)
+
+    result = []
+
+    for tag in tags:
+        if tag_prefix:
+            result.append(f"{tag_prefix}{tag}")
+        else:
+            result.append(tag)
+
+    for package in packages:
+        if package_prefix:
+            result.append(f"{package_prefix}{package}")
+        else:
+            result.append(package)
+
+    return result
+
 # Global state for result storage
 eval_mode: bool = False
 result: Union[Dict[str, str], List[str]] = []
@@ -480,7 +664,6 @@ def _normalize_flavour_for_eval(results: List[str]) -> None:
             result[parts[0].upper()] = 'yes'
     else:
         result[res.upper()] = 'yes'
-
 
 def _normalize_flavour_for_list(results: Union[List[str], str]) -> str:
     '''
@@ -601,7 +784,6 @@ def print_results() -> None:
             print(','.join(result))
 
 def main() -> None:
-    """Main program entry point."""
     global eval_mode, exit_return_code_mode
 
     parser = argparse.ArgumentParser(
@@ -681,7 +863,50 @@ def main() -> None:
         const=True,
         help='Get the installed meta\'s history'
     )
-
+    parser.add_argument(
+        '-p', '--packages',
+        action='store_const',
+        const=True,
+        help='List filtered installed packages'
+    )
+    parser.add_argument(
+        '-g', '--tags',
+        action='store_const',
+        const=True,
+        help='List system tags'
+    )
+    parser.add_argument(
+        '-pg', '--packages-and-tags',
+        action='store_const',
+        const=True,
+        help='List prefixed tags and packages'
+    )
+    parser.add_argument(
+        '--includes-file',
+        type=Path,
+        metavar='FILE',
+        help='Path to includes filter file (default: ./includes or /etc/lliurex-version/includes)'
+    )
+    parser.add_argument(
+        '--excludes-file',
+        type=Path,
+        metavar='FILE',
+        help='Path to excludes filter file (default: ./excludes or /etc/lliurex-version/excludes)'
+    )
+    parser.add_argument(
+        '--tag-prefix',
+        type=str,
+        default=DEFAULT_TAG_PREFIX,
+        metavar='PREFIX',
+        help=f'Prefix for tags in combined listing (default: "{DEFAULT_TAG_PREFIX}")'
+    )
+    parser.add_argument(
+        '--package-prefix',
+        type=str,
+        default=DEFAULT_PACKAGE_PREFIX,
+        metavar='PREFIX',
+        help=f'Prefix for packages in combined listing (default: {"none (empty)" if not DEFAULT_PACKAGE_PREFIX else f"\"{DEFAULT_PACKAGE_PREFIX}\""})'
+    )
     args = parser.parse_args()
 
     # if called whitout arguments print flavour,cddnumber
@@ -689,8 +914,11 @@ def main() -> None:
     if args.all:
         arg_none_for_lliurex_version = False
     else:
-        for arg in vars(args):
-            if getattr(args, arg) is not None:
+        action_args = ['mirror', 'mirror_version', 'eval', 'session', 'flavour', 'usertype',
+                       'with_return_code', 'number', 'version', 'test', 'history',
+                       'packages', 'tags', 'packages_and_tags', 'includes_file', 'excludes_file']
+        for arg in action_args:
+            if getattr(args, arg, None) is not None:
                 arg_none_for_lliurex_version = False
                 break
 
@@ -706,7 +934,6 @@ def main() -> None:
     initialize_result()
 
     try:
-        # Standard detection options
         if args_all or args.session:
             store_session_type(detect_type())
 
@@ -737,7 +964,6 @@ def main() -> None:
                         'MIRROR_LLXVAR'
                     )
 
-        # lliurex-version specific options
         if args.number:
             print(detect_num_cdd())
 
@@ -759,6 +985,26 @@ def main() -> None:
 
         if args.history:
             print(get_history_version().rstrip())
+
+        if args.packages:
+            packages = list_packages(args.includes_file, args.excludes_file)
+            for pkg in packages:
+                print(pkg)
+
+        if args.tags:
+            tags = list_tags()
+            for tag in tags:
+                print(tag)
+
+        if args.packages_and_tags:
+            combined = list_packages_and_tags(
+                args.includes_file,
+                args.excludes_file,
+                args.tag_prefix,
+                args.package_prefix
+            )
+            for item in combined:
+                print(item)
 
         print_results()
 
