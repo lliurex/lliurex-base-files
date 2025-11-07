@@ -1,0 +1,30 @@
+# Format:
+#   - One regex pattern per line
+#   - Lines starting with # are comments (ignored)
+#   - Empty lines are ignored
+#   - Patterns are matched against package names using Python regex
+#
+# Priority:
+#   If a package matches includes and excludes, includes takes priority
+#
+
+# Exlude all packages
+^.*$
+
+# Exclude endings
+#.*-dev$
+
+# Example option regex starting with and two options in string
+#^language-pack-(?!es|ca).*
+
+# Exclude with string in the middle
+#.*-legacy.*
+
+# Exclude packages by exact name (starting-and-ending)
+#^example-package$
+
+# Exclude by architecture
+#.*:i386$
+
+# Exclude escapping characters
+# ^g\+\+-.*
