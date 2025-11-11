@@ -986,15 +986,25 @@ def main() -> None:
         if args.history:
             print(get_history_version().rstrip())
 
-        if args.packages:
-            packages = list_packages(args.includes_file, args.excludes_file)
-            for pkg in packages:
-                print(pkg)
+        if args.packages and args.tags and not args.packages_and_tags:
+            combined = list_packages_and_tags(
+                args.includes_file,
+                args.excludes_file,
+                DEFAULT_TAG_PREFIX,
+                DEFAULT_PACKAGE_PREFIX
+            )
+            for item in combined:
+                print(item)
+        else:
+            if args.packages:
+                packages = list_packages(args.includes_file, args.excludes_file)
+                for pkg in packages:
+                    print(pkg)
 
-        if args.tags:
-            tags = list_tags()
-            for tag in tags:
-                print(tag)
+            if args.tags:
+                tags = list_tags()
+                for tag in tags:
+                    print(tag)
 
         if args.packages_and_tags:
             combined = list_packages_and_tags(
