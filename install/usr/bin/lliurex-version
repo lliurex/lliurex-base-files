@@ -879,7 +879,7 @@ def main() -> None:
         '-pg', '--packages-and-tags',
         action='store_const',
         const=True,
-        help='List prefixed tags and packages'
+        help='List prefixed tags and packages (equivalent to: -p -g, -g -p, -gp)'
     )
     parser.add_argument(
         '--includes-file',
