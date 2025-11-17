@@ -48,6 +48,14 @@ EXCLUDES_FILE_PATHS = [
     Path('./excludes'),
     Path('/etc/lliurex-version/excludes')
 ]
+INCLUDE_TAGS_FILE_PATHS = [
+    Path('./include-tags'),
+    Path('/etc/lliurex-version/include-tags')
+]
+EXCLUDE_TAGS_FILE_PATHS = [
+    Path('./exclude-tags'),
+    Path('/etc/lliurex-version/exclude-tags')
+]
 TAGS_DIRECTORY = Path('/etc/lliurex-auto-upgrade/tags')
 DEFAULT_TAG_PREFIX = 'tag:'
 DEFAULT_PACKAGE_PREFIX = ''
@@ -541,10 +549,16 @@ def filter_packages(packages: List[Tuple[str, str]], includes: List[re.Pattern],
     logger.debug(f"Filtered {len(packages)} packages to {len(filtered)}")
     return filtered
 
-def list_packages(includes_file: Optional[Path] = None, excludes_file: Optional[Path] = None) -> List[str]:
+def list_packages(includes_file: Optional[Path] = None, excludes_file: Optional[Path] = None, no_filter: bool = False) -> List[str]:
     '''
     List filtered installed packages
     '''
+    packages = get_installed_packages()
+
+    if no_filter:
+        result = [f"{name} {version}" for name, version in packages]
+        return result
+
     if includes_file is None:
         includes_file = _find_filter_file(INCLUDES_FILE_PATHS)
 
@@ -554,17 +568,15 @@ def list_packages(includes_file: Optional[Path] = None, excludes_file: Optional[
     includes = _read_filter_file(includes_file) if includes_file else []
     excludes = _read_filter_file(excludes_file) if excludes_file else []
 
-    packages = get_installed_packages()
-
     filtered = filter_packages(packages, includes, excludes)
 
     result = [f"{name} {version}" for name, version in filtered]
 
     return result
 
-def list_tags() -> List[str]:
+def get_tags() -> List[str]:
     '''
-    List system tags from lliurex-auto-upgrade dir
+    Get system tags from lliurex-auto-upgrade dir (without filtering)
     '''
     try:
         if not TAGS_DIRECTORY.exists():
@@ -589,17 +601,67 @@ def list_tags() -> List[str]:
         logger.error(f'Error reading tags directory: {e}')
         return []
 
+def filter_tags(tags: List[str], includes: List[re.Pattern], excludes: List[re.Pattern]) -> List[str]:
+    '''
+    Filter tags based on rules from files
+    '''
+    if not includes and not excludes:
+        return tags
+
+    filtered = []
+
+    for tag in tags:
+        matches_include = any(pattern.search(tag) for pattern in includes) if includes else False
+        matches_exclude = any(pattern.search(tag) for pattern in excludes) if excludes else False
+
+        if matches_include and matches_exclude:
+            filtered.append(tag)
+        elif matches_include:
+            filtered.append(tag)
+        elif matches_exclude:
+            pass
+        else:
+            filtered.append(tag)
+
+    logger.debug(f"Filtered {len(tags)} tags to {len(filtered)}")
+    return filtered
+
+def list_tags(include_tags_file: Optional[Path] = None, exclude_tags_file: Optional[Path] = None, no_filter: bool = False) -> List[str]:
+    '''
+    List filtered system tags
+    '''
+    tags = get_tags()
+
+    if no_filter:
+        return tags
+
+    if include_tags_file is None:
+        include_tags_file = _find_filter_file(INCLUDE_TAGS_FILE_PATHS)
+
+    if exclude_tags_file is None:
+        exclude_tags_file = _find_filter_file(EXCLUDE_TAGS_FILE_PATHS)
+
+    includes = _read_filter_file(include_tags_file) if include_tags_file else []
+    excludes = _read_filter_file(exclude_tags_file) if exclude_tags_file else []
+
+    filtered = filter_tags(tags, includes, excludes)
+
+    return filtered
+
 def list_packages_and_tags(
     includes_file: Optional[Path] = None,
     excludes_file: Optional[Path] = None,
+    include_tags_file: Optional[Path] = None,
+    exclude_tags_file: Optional[Path] = None,
     tag_prefix: str = DEFAULT_TAG_PREFIX,
-    package_prefix: str = DEFAULT_PACKAGE_PREFIX
+    package_prefix: str = DEFAULT_PACKAGE_PREFIX,
+    no_filter: bool = False
 ) -> List[str]:
     '''
     List both tags and packages with optional prefix
     '''
-    tags = list_tags()
-    packages = list_packages(includes_file, excludes_file)
+    tags = list_tags(include_tags_file, exclude_tags_file, no_filter)
+    packages = list_packages(includes_file, excludes_file, no_filter)
 
     result = []
 
@@ -894,6 +956,18 @@ def main() -> None:
         help='Path to excludes filter file (default: ./excludes or /etc/lliurex-version/excludes)'
     )
     parser.add_argument(
+        '--include-tags-file',
+        type=Path,
+        metavar='FILE',
+        help='Path to include-tags filter file (default: ./include-tags or /etc/lliurex-version/include-tags)'
+    )
+    parser.add_argument(
+        '--exclude-tags-file',
+        type=Path,
+        metavar='FILE',
+        help='Path to exclude-tags filter file (default: ./exclude-tags or /etc/lliurex-version/exclude-tags)'
+    )
+    parser.add_argument(
         '--tag-prefix',
         type=str,
         default=DEFAULT_TAG_PREFIX,
@@ -906,6 +980,12 @@ def main() -> None:
         default=DEFAULT_PACKAGE_PREFIX,
         metavar='PREFIX',
         help=f'Prefix for packages in combined listing (default: {"none (empty)" if not DEFAULT_PACKAGE_PREFIX else f"\"{DEFAULT_PACKAGE_PREFIX}\""})'
+    )
+    parser.add_argument(
+        '-N', '--no-filter',
+        action='store_true',
+        dest='no_filter',
+        help='Disable all filtering (ignore includes/excludes files for packages and tags)'
     )
     args = parser.parse_args()
 
@@ -990,19 +1070,22 @@ def main() -> None:
             combined = list_packages_and_tags(
                 args.includes_file,
                 args.excludes_file,
+                args.include_tags_file,
+                args.exclude_tags_file,
                 DEFAULT_TAG_PREFIX,
-                DEFAULT_PACKAGE_PREFIX
+                DEFAULT_PACKAGE_PREFIX,
+                args.no_filter
             )
             for item in combined:
                 print(item)
         else:
             if args.packages:
-                packages = list_packages(args.includes_file, args.excludes_file)
+                packages = list_packages(args.includes_file, args.excludes_file, args.no_filter)
                 for pkg in packages:
                     print(pkg)
 
             if args.tags:
-                tags = list_tags()
+                tags = list_tags(args.include_tags_file, args.exclude_tags_file, args.no_filter)
                 for tag in tags:
                     print(tag)
 
@@ -1010,8 +1093,11 @@ def main() -> None:
             combined = list_packages_and_tags(
                 args.includes_file,
                 args.excludes_file,
+                args.include_tags_file,
+                args.exclude_tags_file,
                 args.tag_prefix,
-                args.package_prefix
+                args.package_prefix,
+                args.no_filter
             )
             for item in combined:
                 print(item)
