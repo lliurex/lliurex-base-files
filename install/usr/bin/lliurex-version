@@ -975,12 +975,13 @@ def main() -> None:
         metavar='PREFIX',
         help=f'Prefix for tags in combined listing (default: "{DEFAULT_TAG_PREFIX}")'
     )
+    package_prefix_default = 'none (empty)' if not DEFAULT_PACKAGE_PREFIX else f'"{DEFAULT_PACKAGE_PREFIX}"'
     parser.add_argument(
         '--package-prefix',
         type=str,
         default=DEFAULT_PACKAGE_PREFIX,
         metavar='PREFIX',
-        help=f'Prefix for packages in combined listing (default: {"none (empty)" if not DEFAULT_PACKAGE_PREFIX else f"\"{DEFAULT_PACKAGE_PREFIX}\""})'
+        help=f'Prefix for packages in combined listing (default: {package_prefix_default})'
     )
     parser.add_argument(
         '--package-separator',
