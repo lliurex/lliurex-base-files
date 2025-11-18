@@ -11,8 +11,8 @@
 # Include all tags from lliurex and system namespace not ending with "unknown"
 # ^(lliurex|system)\.(?!.*unknown$).*
 
-# Include all tags not starting with some namespace (network,testing) (excluded) and not endig with "unknown"
-^(?!(network|testing)\.)(?!.*unknown$).*
+# Include all tags not starting with some namespace (network.ipv4,network.mac) (excluded) and not endig with "unknown"
+^(?!(network\.ipv4|network\.mac))(?!.*unknown$).*
 
 # Include all namespaces not ending with "unknown"
 # ^(?!.*unknown$).*
