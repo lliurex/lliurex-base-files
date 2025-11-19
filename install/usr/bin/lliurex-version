@@ -573,7 +573,14 @@ def filter_packages(
     logger.debug(f"Filtered {len(packages)} packages to {len(filtered)}")
     return filtered
 
-def list_packages(includes_file: Optional[Path] = None, excludes_file: Optional[Path] = None, no_filter: bool = False, separator: str = ' ', full_fields: bool = False) -> List[str]:
+def list_packages(
+        includes_file: Optional[Path] = None, 
+        excludes_file: Optional[Path] = None, 
+        no_filter: bool = False, 
+        separator: str = ' ', 
+        full_fields: bool = False, 
+        package_prefix: str = ''
+    ) -> List[str]:
     '''
     List filtered installed packages
     '''
@@ -581,9 +588,12 @@ def list_packages(includes_file: Optional[Path] = None, excludes_file: Optional[
 
     if no_filter:
         if full_fields:
-            result = [separator.join(pkg_data) for pkg_data in packages]
+            if package_prefix:
+                result = [separator.join([f"{package_prefix}{pkg_data[0]}"] + list(pkg_data[1:])) for pkg_data in packages]
+            else:
+                result = [separator.join(pkg_data) for pkg_data in packages]
         else:
-            result = [f'{name}{separator}{version}' for name, version in packages]
+            result = [f'{package_prefix}{name}{separator}{version}' for name, version in packages]
         return result
 
     if includes_file is None:
@@ -598,9 +608,12 @@ def list_packages(includes_file: Optional[Path] = None, excludes_file: Optional[
     filtered = filter_packages(packages, includes, excludes)
 
     if full_fields:
-        result = [separator.join(pkg_data) for pkg_data in filtered]
+        if package_prefix:
+            result = [separator.join([f"{package_prefix}{pkg_data[0]}"] + list(pkg_data[1:])) for pkg_data in filtered]
+        else:
+            result = [separator.join(pkg_data) for pkg_data in filtered]
     else:
-        result = [f'{name}{separator}{version}' for name, version in filtered]
+        result = [f'{package_prefix}{name}{separator}{version}' for name, version in filtered]
 
     return result
 
@@ -656,7 +669,14 @@ def filter_tags(tags: List[str], includes: List[re.Pattern], excludes: List[re.P
     logger.debug(f"Filtered {len(tags)} tags to {len(filtered)}")
     return filtered
 
-def list_tags(include_tags_file: Optional[Path] = None, exclude_tags_file: Optional[Path] = None, no_filter: bool = False, separator: str = ' ', full_fields: bool = False) -> List[str]:
+def list_tags(
+        include_tags_file: Optional[Path] = None, 
+        exclude_tags_file: Optional[Path] = None, 
+        no_filter: bool = False, 
+        separator: str = ' ', 
+        full_fields: bool = False, 
+        tag_prefix: str = ''
+    ) -> List[str]:
     '''
     List filtered system tags
     '''
@@ -683,10 +703,13 @@ def list_tags(include_tags_file: Optional[Path] = None, exclude_tags_file: Optio
         # 6 cols: {tag}, "all", {version}, "1", "llxtag", "install ok installed"
         result = []
         for tag in filtered:
-            formatted_tag = f'{tag}{separator}all{separator}{version_short}{separator}1{separator}llxtag{separator}install ok installed'
+            prefixed_tag = f'{tag_prefix}{tag}'
+            formatted_tag = f'{prefixed_tag}{separator}all{separator}{version_short}{separator}1{separator}llxtag{separator}install ok installed'
             result.append(formatted_tag)
         return result
     else:
+        if tag_prefix:
+            return [f'{tag_prefix}{tag}' for tag in filtered]
         return filtered
 
 def list_packages_and_tags(
@@ -699,33 +722,14 @@ def list_packages_and_tags(
     no_filter: bool = False,
     package_separator: str = ' ',
     full_fields: bool = False
-) -> List[str]:
+    ) -> List[str]:
     '''
     List both tags and packages with optional prefix
     '''
-    tags = list_tags(include_tags_file, exclude_tags_file, no_filter, package_separator, full_fields)
-    packages = list_packages(includes_file, excludes_file, no_filter, package_separator, full_fields)
+    tags = list_tags(include_tags_file, exclude_tags_file, no_filter, package_separator, full_fields, tag_prefix)
+    packages = list_packages(includes_file, excludes_file, no_filter, package_separator, full_fields, package_prefix)
 
-    result = []
-
-    for tag in tags:
-        if tag_prefix:
-            if full_fields:
-                parts = tag.split(package_separator, 1)
-                if len(parts) == 2:
-                    result.append(f'{tag_prefix}{parts[0]}{package_separator}{parts[1]}')
-                else:
-                    result.append(f'{tag_prefix}{tag}')
-            else:
-                result.append(f'{tag_prefix}{tag}')
-        else:
-            result.append(tag)
-
-    for package in packages:
-        if package_prefix:
-            result.append(f'{package_prefix}{package}')
-        else:
-            result.append(package)
+    result = tags + packages
 
     return result
 
@@ -1055,14 +1059,14 @@ def main() -> None:
         '--glpi',
         action='store_true',
         dest='glpi',
-        help='GLPI inventory format (same as: -pg -ff --package-separator \'\\t\')'
+        help='GLPI inventory format preset (sets: -ff --package-separator \'\\t\' --tag-prefix \'llxtag_\'). Use with -p, -g, or -pg'
     )
     args = parser.parse_args()
 
     if args.glpi:
-        args.packages_and_tags = True
         args.full_fields = True
         args.package_separator = '\t'
+        args.tag_prefix = 'llxtag_'
 
     package_separator = args.package_separator
     # maybe is escaped
@@ -1164,12 +1168,12 @@ def main() -> None:
                 print(item)
         else:
             if args.packages:
-                packages = list_packages(args.includes_file, args.excludes_file, args.no_filter, package_separator, args.full_fields)
+                packages = list_packages(args.includes_file, args.excludes_file, args.no_filter, package_separator, args.full_fields, args.package_prefix)
                 for pkg in packages:
                     print(pkg)
 
             if args.tags:
-                tags = list_tags(args.include_tags_file, args.exclude_tags_file, args.no_filter, package_separator, args.full_fields)
+                tags = list_tags(args.include_tags_file, args.exclude_tags_file, args.no_filter, package_separator, args.full_fields, args.tag_prefix)
                 for tag in tags:
                     print(tag)
 
