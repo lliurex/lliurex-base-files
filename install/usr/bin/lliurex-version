@@ -1158,8 +1158,8 @@ def main() -> None:
                 args.excludes_file,
                 args.include_tags_file,
                 args.exclude_tags_file,
-                DEFAULT_TAG_PREFIX,
-                DEFAULT_PACKAGE_PREFIX,
+                args.tag_prefix,
+                args.package_prefix,
                 args.no_filter,
                 package_separator,
                 args.full_fields
