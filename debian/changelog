@@ -1,3 +1,9 @@
+lliurex-base-files (23.02) jammy; urgency=medium
+
+  * Backport merge new lliurex-version from (master,debian/noble)
+
+ -- M.Angel Juan <m.angel.juan@gmail.com>  Fri, 21 Nov 2025 15:32:45 +0100
+
 lliurex-base-files (23.01) jammy; urgency=medium
 
   * Add xdg-user-dirs wrapper to create folders 
