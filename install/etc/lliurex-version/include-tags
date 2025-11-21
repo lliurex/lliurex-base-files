@@ -1,0 +1,21 @@
+# Format:
+#   - One regex pattern per line
+#   - Lines starting with # are comments (ignored)
+#   - Empty lines are ignored
+#   - Patterns are matched against package names using Python regex
+#
+# Note:
+#   If a package matches includes and excludes, includes take priority
+#
+
+# Include all tags from lliurex and system namespace not ending with "unknown"
+# ^(lliurex|system)\.(?!.*unknown$).*
+
+# Include all tags not starting with some namespace (network.ipv4,network.mac) (excluded) and not endig with "unknown"
+^(?!(network\.ipv4|network\.mac))(?!.*unknown$).*
+
+# Include all namespaces not ending with "unknown"
+# ^(?!.*unknown$).*
+
+# Include all tags
+# ^.*$
