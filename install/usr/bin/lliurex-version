@@ -1,538 +1,1208 @@
 #!/usr/bin/python3
+"""
+lliurex-version - LLiureX information tool
 
-#
-# Examples: 
-# Export all variables into environment:>  eval export $(lliurex-detect -e -a) 
-# Test one condition:> lliurex-detect -x thin && echo si || echo no
-# Test one condition:> if lliurex-detect -x ltsp; then echo si; else echo no; fi
-# Get flavour:> FLA=$(lliurex-detect -f)
-#
+Examples:
+    Export all variables into environment:
+        eval export $(lliurex-version -e -a)
+
+    Test one condition:
+        lliurex-version -x thin && echo si || echo no
+
+    Test one condition:
+        if lliurex-version -x ltsp; then echo si; else echo no; fi
+
+    Get flavour:
+        FLA=$(lliurex-version -f)
+"""
+
 import sys
-import os 
+import os
 import codecs
-import pwd,grp
+import pwd
+import grp
 import argparse
 import re
 import json
-# import glob  # Commented: python 3.5 is not available on lliurex 15
-import fnmatch # allows search recursively without glob
+import logging
+from pathlib import Path
+from subprocess import check_output, CalledProcessError, DEVNULL
+from typing import List, Dict, Optional, Union, Tuple, Any
 
-from subprocess import check_output
+logging.basicConfig(
+    level=logging.WARNING,
+    format='%(levelname)s: %(message)s',
+    stream=sys.stderr
+)
+logger = logging.getLogger(__name__)
 
-ltsConfFile="/etc/lts.conf"
-LLIUREX_VERSION_NUMBER="23"
-LLIUREX_VERSION_CODENAME="jammy"
+LLIUREX_VERSION_NUMBER = "23"
+LLIUREX_VERSION_CODENAME = "jammy"
+ROFS_DIR = Path("/rofs")
+MIRROR_BASE_PATH = Path(f"/net/mirror/llx{LLIUREX_VERSION_NUMBER}")
+INCLUDES_FILE_PATHS = [
+    Path('./includes'),
+    Path('/etc/lliurex-version/includes')
+]
+EXCLUDES_FILE_PATHS = [
+    Path('./excludes'),
+    Path('/etc/lliurex-version/excludes')
+]
+INCLUDE_TAGS_FILE_PATHS = [
+    Path('./include-tags'),
+    Path('/etc/lliurex-version/include-tags')
+]
+EXCLUDE_TAGS_FILE_PATHS = [
+    Path('./exclude-tags'),
+    Path('/etc/lliurex-version/exclude-tags')
+]
+TAGS_DIRECTORY = Path('/etc/lliurex-auto-upgrade/tags')
+DEFAULT_TAG_PREFIX = 'tag:'
+DEFAULT_PACKAGE_PREFIX = ''
 
-def detect_live():
-    #test1=False
-    test2=False
-    test3=False
+class NotLiveSystemError(Exception):
+    pass
 
-    if os.path.isdir('/rofs'):
-        #r1=re.compile('^tmpfs\s/cow\stmpfs')
-        r2=re.compile('^/cow\s/\soverlay')
-        r3=re.compile('^/dev/loop0\s/rofs\ssquashfs')
-        with open('/proc/mounts') as mounts_file:
-            for line in mounts_file.readlines():
-                #if r1.match(line):
-                #    test1=True
-                if r2.match(line):
-                    test2=True
-                if r3.match(line):
-                    test3=True
-    if test2 and test3:
-        pass
-    else:
-        raise Exception('Not live')
+class CDDDetectionError(Exception):
+    pass
 
-#def detect_live():
+class UserNotFoundError(Exception):
+    pass
 
-def detect_flavour():
-# Use with python > 3.5 with glob new features
-#        cdd_content=[]
-#        file_name= [ filename for filename in glob.iglob('/usr/share/lliurex-cdd/**/cddflavour', recursive=True) ]
-#        if len(file_name) > 0:
-#           for cddfile in file_name:
-#               try:
-#                    with open(cddfile,'r') as fileccd:
-#                       cdd= [ line.strip() for line in fileccd ]
-#                       cdd_content.extend(cdd)
-#               except Exception as e:
-#                   raise Exception('cddflavour error '+str(e))
-#        else:
-#            file_name= [ filename for filename in glob.iglob('/usr/share/lliurex-cdd/**/cddversion', recursive=True) ]
-#            if len(file_name) > 0:
-#                for cddfile in file_name:
-#                    try:
-#                       with open(cddfile,'r') as fileccd:
-#                          cdd= [ line.strip() for line in fileccd ]
-#                          cdd_content.extend(cdd)
-#                    except Exception as e:
-#                        raise Exception('cddversion file error '+str(e))
-#            else:
-#               raise Exception('cddflavour or cddversion file not found! ')
-#       cdd_content=list(set(cdd_content))
-#       cdd_content.sort()
-#       return cdd_content
+class MirrorError(Exception):
+    pass
 
-# Code for python < 3.5 without glob
-        file_name=[]
-        cdd_content=[]
-        for root,dirnames,filenames in os.walk('/usr/share/lliurex-cdd'):
-            for filename in fnmatch.filter(filenames,'cddflavour'):
-                file_name.append(os.path.join(root,filename))
-        if len(file_name) > 0:
-            for cddfile in file_name:
-                try:
-                    with open(cddfile,'r') as fileccd:
-                        cdd= [ line.strip() for line in fileccd ]
-                        cdd_content.extend(cdd)
-                except Exception as e:
-                    cdd_content.append('None')
-                    #raise Exception('cddflavour file error '+str(e))
-        else:
-            for root,dirnames,filenames in os.walk('/usr/share/lliurex-cdd'):
-                for filename in fnmatch.filter(filenames,'cddversion'):
-                    file_name.append(os.path.join(root,filename))
-            if len(file_name) > 0:
-                for cddfile in file_name:
-                    try:
-                        with open(cddfile,'r') as fileccd:
-                            cdd= [ line.strip() for line in fileccd ]
-                            cdd_content.extend(cdd)
-                    except Exception as e:
-                        cdd_content.append('None')
-                        #raise Exception('cddversion file error '+str(e))
-            else:
-                #raise Exception('cddflavour or cddversion file not found! ')
-                cdd_content.append('None')
-        cdd_content=list(set(cdd_content))
-        cdd_content.sort()
-        return cdd_content
-#def detect_flavour
+def detect_live() -> None:
+    '''
+    Detect if the system is running in live mode checking /rofs dir and overlay mount points
+    '''
+    PROC_MOUNTS = Path("/proc/mounts")
+    RE_OVERLAY_MOUNT = re.compile(r'^/cow\s+/\s+overlay')
+    RE_SQUASHFS_MOUNT = re.compile(r'^/dev/loop0\s+/rofs\s+squashfs')
 
-def detect_num_cdd():
+    if not ROFS_DIR.is_dir():
+        raise NotLiveSystemError('Not live: /rofs directory not found')
+
+    has_overlay = False
+    has_squashfs = False
+
     try:
-        with open(os.devnull, 'w') as devnull:
-            num_cdd=check_output(['dpkg-query','--showformat=\'${Version}\'','--show','lliurex-version-timestamp'],stderr=devnull).decode('utf-8')
-        return num_cdd.strip('\'')
-    except Exception as e1:
-        try:
-            with open('/usr/share/lliurex-cdd/version','r') as cdd_num_file:
-                return cdd_num_file.readline().strip()
-        except Exception as e2:
-            return '0'
-            #raise Exception('Error1: '+e1+' and Error2: '+e2)
-#def detect_num_cdd():
+        with PROC_MOUNTS.open('r') as mounts_file:
+            for line in mounts_file:
+                if RE_OVERLAY_MOUNT.match(line):
+                    has_overlay = True
+                if RE_SQUASHFS_MOUNT.match(line):
+                    has_squashfs = True
+                if has_overlay and has_squashfs:
+                    break
+    except (OSError, IOError) as e:
+        logger.error(f'Error reading {PROC_MOUNTS}: {e}')
+        raise NotLiveSystemError(f'Cannot read mounts file: {e}')
 
-def get_history_version():
+    if not (has_overlay and has_squashfs):
+        raise NotLiveSystemError('Not live: required mounts not found')
+
+def _find_cdd_files(filename: str) -> List[Path]:
+    '''
+    Find CDD files recursively in the CDD base path.
+    '''
+    CDD_BASE_PATH = Path("/usr/share/lliurex-cdd")
+    found = []
     try:
-        with open('/etc/lliurex-cdd-version','r') as etc_cdd_file:
-            return etc_cdd_file.read()
+        for root, _, filenames in os.walk(CDD_BASE_PATH):
+            for fname in filenames:
+                if fname == filename:
+                    found.append(Path(root) / fname)
+    except (OSError, IOError) as e:
+        logger.critical(f'Error listing cdd folder {CDD_BASE_PATH}: {e}')
     except Exception as e:
-        raise Exception('Error: '+e)
-#def get_history_version()
+        logger.error(f'Error in _find_cdd_files {CDD_BASE_PATH}: {e}')
+    return found
 
-def detect_type():
-#
-#   Possible output values: live,thin,semi,fat,unknown
-#
-#
+def _read_cdd_file(file_path: Path) -> List[str]:
+    '''
+    Read a CDD file into string list.
+    '''
+    try:
+        with file_path.open('r', encoding='utf-8') as fp:
+            return [line.strip() for line in fp if line.strip()]
+    except (OSError, IOError) as e:
+        logger.critical(f'Error reading cdd file {file_path}: {e}')
+    except Exception as e:
+        logger.error(f'Error in _read_cdd_file {file_path}: {e}')
+    return ['None']
 
-    display=os.environ.get('DISPLAY')
-    #On thin clients display is ip+display so it's at least 7 chars 
-    if display != None and len(display)>= 7:
-        client_type='thin'
-    else:
-        if os.path.exists(ltsConfFile):
-        #Attempt to open lts.conf as is more reliable than check environment
-            try:
-                 re_true=re.compile('LTSP_FATCLIENT(\s)*=(\s)*true',re.IGNORECASE)
-                 re_false=re.compile('LTSP_FATCLIENT(\s)*=(\s)*false',re.IGNORECASE)
-                 with open(ltsConfFile) as ltsfile:
-                      for line in ltsfile.readlines():
-                             if re_true.match(line):
-                                 client_type='semi'
-                                 break
-                             elif re_false.match(line):
-                                 client_type='thin'
-                                 break
-                             else:
-                                 client_type='unknown'
-            except Exception as e:
-                fatclient=os.environ.get('LTSP_FATCLIENT')
-                if fatclient=='true':
-                    client_type="semi"
+def detect_flavour() -> List[str]:
+    '''
+    Detect the system flavour
+    '''
+    cdd_content = []
+
+    file_paths = _find_cdd_files('cddflavour')
+
+    if not file_paths:
+        file_paths = _find_cdd_files('cddversion')
+
+    if not file_paths:
+        logger.warning('No cddflavour or cddversion files found')
+        return ['None']
+
+    for file_path in file_paths:
+        cdd_content.extend(_read_cdd_file(file_path))
+
+    cdd_content = sorted(set(cdd_content))
+
+    if cdd_content:
+        return cdd_content
+    return ['None']
+
+def detect_num_cdd() -> str:
+    '''
+    Detect version
+    '''
+    CDD_VERSION_FILE = Path('/usr/share/lliurex-cdd/version')
+    DEFAULT_FOR_UNKNOWN_VERSION = '0'
+    try:
+        num_cdd = check_output(
+            ['dpkg-query', '--showformat=\'${Version}\'', '--show', 'lliurex-version-timestamp'],
+            stderr=DEVNULL
+        ).decode('utf-8')
+        return num_cdd.strip('\'')
+    except (CalledProcessError, FileNotFoundError, OSError) as e:
+        logger.error(f'Fail when running dpkg-query: {e}')
+    except Exception as e:
+        logger.error(f'Error in detect_num_cdd: {e}')
+
+    try:
+        with CDD_VERSION_FILE.open('r') as cdd_num_file:
+            return cdd_num_file.readline().strip()
+    except (OSError, IOError) as e:
+        logger.critical(f'Cannot read version file: {e}')
+    except Exception as e:
+        logger.error(f'Error in detect_num_cdd: {e}')
+
+    return DEFAULT_FOR_UNKNOWN_VERSION
+
+def get_history_version() -> str:
+    '''
+    Get the history of installed meta packages.
+    '''
+    ETC_CDD_VERSION_FILE = Path('/etc/lliurex-cdd-version')
+    try:
+        with ETC_CDD_VERSION_FILE.open('r') as etc_cdd_file:
+            return etc_cdd_file.read()
+    except (OSError, IOError) as e:
+        logging.critical(f'Error in get_history_version: {e}')
+        raise CDDDetectionError(f'Cannot read history file: {e}')
+
+def detect_type() -> str:
+    '''
+    Detect the session type.
+    Possible output values: live (with rofs fs), thin (has remote display), semi (local+ltsp), fat (local system), unknown or mix
+    '''
+    LTS_CONF_FILE = Path('/etc/lts.conf')
+    RE_LTSP_FATCLIENT_TRUE = re.compile(r'LTSP_FATCLIENT(\s)*=(\s)*true', re.IGNORECASE)
+    RE_LTSP_FATCLIENT_FALSE = re.compile(r'LTSP_FATCLIENT(\s)*=(\s)*false', re.IGNORECASE)
+
+    display = os.environ.get('DISPLAY')
+
+    # On thin clients, display is ip+display, so it's at least 7 chars
+    if display and len(display) >= 7:
+        client_type = 'thin'
+    elif LTS_CONF_FILE.exists():
+        # Attempt to open lts.conf as it's more reliable than checking environment
+        try:
+            with LTS_CONF_FILE.open('r') as ltsfile:
+                for line in ltsfile:
+                    if RE_LTSP_FATCLIENT_TRUE.match(line):
+                        client_type = 'semi'
+                        break
+                    elif RE_LTSP_FATCLIENT_FALSE.match(line):
+                        client_type = 'thin'
+                        break
                 else:
-                    if fatclient=='false':
-                        client_type="thin"
-                    else:
-                        client_type="unknown"  
-        else:
-            client_type='fat'
+                    client_type = 'unknown'
+        except Exception as e:
+            logger.warning(f'Cannot read {LTS_CONF_FILE}: {e}')
+            logger.info(f'Trying to detect type from environment')
+            fatclient = os.environ.get('LTSP_FATCLIENT')
+            fatclient = fatclient.lower()
+            if fatclient == 'true':
+                client_type = 'semi'
+            elif fatclient == 'false':
+                client_type = 'thin'
+            else:
+                client_type = 'unknown'
+    else:
+        client_type = 'fat'
+
+    # Check if it's a live session
     try:
         detect_live()
-        client_type=client_type+',live'
-    except:
+        client_type = f'{client_type},live'
+    except NotLiveSystemError:
         pass
 
     return client_type.rstrip()
-#def detect_type
 
-def detect_user(user=''):
-    if user == '' or user == None:
-        user_id=os.getuid()
-        user_name=pwd.getpwuid(user_id)[0]
+def detect_user(user: str = '') -> str:
+    '''
+    Detect user and type (local/ldap) running this script or passed as parameter
+    Detected promoted user is prefixed with *
+    '''
+    PASSWD_FILE = Path("/etc/passwd")
+
+    if not user:
+        user_id = os.getuid()
+        user_name = pwd.getpwuid(user_id)[0]
     else:
         try:
-            user_uid=pwd.getpwnam(user)[3]
-        except:
-            raise Exception('user not found!')
-        user_name=user
+            pwd.getpwnam(user)
+        except KeyError:
+            raise UserNotFoundError(f'User not found: {user}')
+        user_name = user
+
     #user_info [0]=>username [1]=>pwd [2]=>uid [3]=>gid [4]=>gecos [5]=>homedir [6]=>shell
     #grp_info [0]=>name [1]=>pwd [2]=>gid [3]=>member
-    grupos = [ group[0] for group in grp.getgrall() if user_name in group[3] ]
-    with codecs.open('/etc/passwd','r','utf-8') as filepwd:
-        localusers=[ line.split(':')[0] for line in filepwd.readlines() ]
 
-    ret=user_name
-    if 'admins' in grupos :
-        ret='*'+str(user_name)
+    grupos = [group[0] for group in grp.getgrall() if user_name in group[3]]
+
+    try:
+        with PASSWD_FILE.open('r', encoding='utf-8') as fp:
+            localusers = []
+            for line in fp:
+                parts = line.split(':')
+                if len(parts) >= 1:
+                    localusers.append(parts[0])
+    except Exception as e:
+        logger.error(f'Cannot read {PASSWD_FILE}: {e}')
+        localusers = []
+
+    ret = user_name
+
+    # Check if user is in admins group (promoted)
+    if 'admins' in grupos:
+        ret = f'*{user_name}'
+
+    # Check if local or LDAP user
     if user_name in localusers:
         ret += '/local'
     else:
         ret += '/ldap'
+
     return ret
-#def detect_user():
 
-def check_mirror_llxvar():
+def check_mirror_llxvar() -> Dict[str, str]:
+    '''
+    Check mirror information from N4D variables.
+    '''
+
+    N4D_LLIUREXMIRROR_VAR_PATHS = [
+        Path('/var/lib/n4d/variables/LLIUREXMIRROR'),
+        Path('/var/lib/n4d/variables-dir/LLIUREXMIRROR')
+    ]
     ret = {}
-    try:
+
+    for var_path in N4D_LLIUREXMIRROR_VAR_PATHS:
         try:
-            with open('/var/lib/n4d/variables/LLIUREXMIRROR','r') as fp:
-                content = json.load(fp)
+            try:
+                with var_path.open('r') as fp:
+                    content = json.load(fp)
+            except (OSError, IOError, json.JSONDecodeError) as e:
+                logger.warning(f'Cannot read {var_path}: {e}')
+                continue
+
+            content = content.get('LLIUREXMIRROR', {}).get('value', {}).get(f'llx{LLIUREX_VERSION_NUMBER}', {})
+
+            if content:
+                ret.setdefault('status', content.get('status_mirror'))
+                ret.setdefault('size', content.get('mirror_size'))
+                ret.setdefault('progress', content.get('progress'))
+                ret.setdefault('last_update', content.get('last_mirror_date'))
+
+            return ret
         except Exception as e:
-            with open('/var/lib/n4d/variables-dir/LLIUREXMIRROR','r') as fp:
-                content = json.load(fp)
-        content = content.get('LLIUREXMIRROR',{}).get('value',{}).get('llx{}'.format(LLIUREX_VERSION_NUMBER),{})
-        if content:
-            ret.setdefault('status',content.get('status_mirror'))
-            ret.setdefault('size',content.get('mirror_size'))
-            ret.setdefault('progress',content.get('progress'))
-            ret.setdefault('last_update',content.get('last_mirror_date'))
-        return ret
-    except Exception as e:
-        sys.stderr.write('Error reading LLIUREXMIRROR llxvar, {}\n'.format(e))
-        sys.stderr.flush()
-        return {'status':'Error','size':'Error','progress':'Error','last_update':'Error'}
+            logger.error(f'Error reading LLIUREXMIRROR llxvar in {var_path}: {e}')
+            continue
 
-def check_mirror_timestamp():
+    logger.error('Error reading LLIUREXMIRROR llxvar from all known paths')
+    return {
+        'status': 'Error',
+        'size': 'Error',
+        'progress': 'Error',
+        'last_update': 'Error'
+    }
+
+def check_mirror_timestamp() -> str:
+    '''
+    Check the timestamp of the mirror from lliurex-version-timestap package.
+    '''
+    RE_MIRROR_TIMESTAMP_DEB = re.compile(r'lliurex-version-timestamp_[0-9]{2}\.([0-9]+)_[^.]*\.deb$')
+
     try:
-        if check_mirror == True:
-            reg = 'lliurex-version-timestamp_[0-9]{2}\.([0-9]+)_[^.]*\.deb$'
-            for f in os.listdir('/net/mirror/llx{}/pool/main/l/lliurex-version-timestamp/'.format(LLIUREX_VERSION_NUMBER)):
-                m = re.findall(reg,f)
-                if m:
-                    timestamp = m[0]
-                    timestamp = "{}/{}/20{}".format(timestamp[4:6],timestamp[2:4],timestamp[0:2])
-        else:
-            timestamp = 'No mirror done'
+        if not check_mirror():
+            return 'No mirror done'
 
-        return timestamp
-    except Exception as e:
-        sys.stderr.write("Error checking mirror timestamp, {}\n".format(e))
-        sys.stderr.flush()
+        mirror_pool_path = MIRROR_BASE_PATH / 'pool' / 'main' / 'l' / 'lliurex-version-timestamp'
+
+        if not mirror_pool_path.exists():
+            logger.error(f'Path {mirror_pool_path} not exists!')
+            return 'Error'
+
+        # Search lliurex-version-timestamp_<version>.deb file
+        for f in mirror_pool_path.iterdir():
+            if not f.is_file():
+                continue
+
+            match = RE_MIRROR_TIMESTAMP_DEB.findall(f.name)
+            if match:
+                timestamp = match[0]
+                # Parse timestamp: format is YYMMDD in the version number
+                # Return timestamp: format DDMMYY
+                return f'{timestamp[4:6]}/{timestamp[2:4]}/20{timestamp[0:2]}'
+        logging.error(f'Not found lliurex-version-timestamp_<version>.deb on {mirror_pool_path}')
+        return 'Error'
+    except (OSError, IOError) as e:
+        logger.error(f'Error checking mirror timestamp: {e}')
         return 'Error'
 
-def check_mirror():
-    #
-    # Run checks against mirror
-    #
-    mirror_location='/net/mirror/llx{}'.format(LLIUREX_VERSION_NUMBER)
+def check_structure(path_from: Path, child: Union[Dict, List, Tuple, str] = '') -> bool:
+    '''
+    Recursively check if a directory structure matches the expected layout.
+    '''
+    DBG=False
+    dbg=lambda x: DBG and sys.stdout.write(x+'\n')
+    if isinstance(child, dict):
+        for item in child:
+            new_path = path_from / item
+            if not check_structure(path_from, item):
+                return False
+            if not check_structure(new_path, child[item]):
+                return False
+
+    elif isinstance(child, list):
+        for item in child:
+            if not check_structure(path_from, item):
+                return False
+
+    elif isinstance(child, tuple):
+        mode, value = child
+        if mode == 'regexp':
+            reg = re.compile(value)
+            try:
+                for f in path_from.iterdir():
+                    path_check = path_from / f
+                    dbg(f'Checking file {path_check}')
+                    if f.is_file() and reg.match(f.name):
+                        return True
+            except (OSError, IOError):
+                return False
+            return False
+        else:
+            path_check = path_from / value
+            dbg(f'Checking file {path_check}')
+            return path_check.is_file()
+
+    elif isinstance(child, str):
+        path_check = path_from / child
+        dbg(f'Checking dir {path_check}')
+        return path_check.is_dir()
+
+    return True
+
+def check_mirror() -> bool:
+    '''
+    Check if a valid mirror is available.
+    '''
+    codename_lower = LLIUREX_VERSION_CODENAME.lower()
+
+    # Structure hints!
     #dict = check keys & recurse into values
     #list = check items
     #tuple = check items(files or regexp) ; syntax=('type','value') where type = 'regexp' or something else to exact match
     #string = check items
 
-    #need_structure={'pool':[{'main':{'l/lliurex-version-timestamp':('regexp','lliurex-version-timestamp_.*\.deb$')}},'universe','multiverse','preschool','restricted'],
-    #                'dists':['xenial','xenial-security','xenial-updates'],
-    #                'lists':[('regexp','.*xenial.*_amd64_Packages$'),('regexp','.*xenial.*_i386_Packages$')]}
+    need_structure = {
+        'pool': [
+            {
+                'main': {
+                    'l/lliurex-version-timestamp': (
+                        'regexp',
+                        r'lliurex-version-timestamp_.*\.deb$'
+                    )
+                }
+            },
+            'universe',
+            'multiverse',
+            'restricted'
+        ],
+        'dists': [
+            codename_lower,
+            f'{codename_lower}-security',
+            f'{codename_lower}-updates'
+        ]
+    }
 
-    need_structure={'pool':[{'main':{'l/lliurex-version-timestamp':('regexp','lliurex-version-timestamp_.*\.deb$')}},'universe','multiverse','restricted'],
-                    'dists':['{}'.format(LLIUREX_VERSION_CODENAME.lower()),'{}-security'.format(LLIUREX_VERSION_CODENAME.lower()),'{}-updates'.format(LLIUREX_VERSION_CODENAME.lower())]}
     try:
-        return os.path.isdir(mirror_location) and check_structure(mirror_location,need_structure)
+        return MIRROR_BASE_PATH.is_dir() and check_structure(MIRROR_BASE_PATH, need_structure)
+    except (OSError, IOError) as e:
+        # As a guest user, /net isn't accessible. If something goes wrong, return False
+        logger.error(f"Mirror check failed: {e}")
     except Exception as e:
-        # As a guest user, /net isn't accessible somehow. Nontheless, if something goes wrong, we return False anyway
-        #print(e)
-        return False
+        logger.error(f"Error in check_mirror: {e}")
+    return False
 
-def check_structure(path_from,child=''):
-    DBG=False
-    dbg=lambda x: DBG and sys.stdout.write(x+'\n')
-    typeparam=type(child)
-    if typeparam == type(dict()):
-        for item in child:
-            new_path=path_from+'/'+item
-            if not check_structure(path_from,item):
-                return False
-            if not check_structure(new_path,child[item]):
-                return False
-    elif typeparam == type(list()):
-        for item in child:
-            if not check_structure(path_from,item):
-                return False
-    elif typeparam == type(tuple()):
-        mode,value=child
-        if mode=='regexp':
-            reg=re.compile(value)
-            for f in os.listdir(path_from):
-                path_check=path_from+'/'+f
-                dbg('checking file ' + path_check)
-                if os.path.isfile(path_check):
-                    if reg.match(f):
-                        return True
-            return False
+def _read_filter_file(file_path: Path) -> List[re.Pattern]:
+    '''
+    Read filter file and return compiled regex patterns excluding lines starting with '#' or empty.
+    '''
+    patterns = []
+
+    if not file_path.exists():
+        logger.debug(f'Filter file not found: {file_path}')
+        return patterns
+
+    try:
+        with file_path.open('r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+
+                if not line or line.startswith('#'):
+                    continue
+
+                try:
+                    pattern = re.compile(line)
+                    patterns.append(pattern)
+                except re.error as e:
+                    logger.warning(f'Invalid regex in {file_path} line {line_num}: {line} - {e}')
+                    continue
+
+    except (OSError, IOError) as e:
+        logger.error(f'Error reading filter file {file_path}: {e}')
+        return []
+
+    logger.debug(f'Loaded {len(patterns)} patterns from {file_path}')
+    return patterns
+
+def _find_filter_file(paths: List[Path]) -> Optional[Path]:
+    '''
+    Find first existing filter file from list of paths.
+    '''
+    for path in paths:
+        if path.exists() and path.is_file():
+            logger.debug(f"Found filter file: {path}")
+            return path
+
+    logger.debug(f"No filter file found in: {paths}")
+    return None
+
+def get_installed_packages(full_fields: bool = False) -> Union[List[Tuple[str, str]], List[Tuple[str, str, str, str, str, str]]]:
+    '''
+    Get list of installed packages with versions using dpkg-query
+    '''
+    try:
+        if full_fields:
+            output = check_output(
+                ['dpkg-query', '-W', '-f=${Package}\t${Architecture}\t${Version}\t${Installed-Size}\t${Section}\t${Status}\n'],
+                stderr=DEVNULL
+            ).decode('utf-8')
+
+            packages = []
+            for line in output.strip().split('\n'):
+                if not line.strip():
+                    continue
+
+                parts = line.split('\t')
+                if len(parts) == 6:
+                    packages.append(tuple(parts))
+
+            packages.sort(key=lambda x: x[0].lower())
+            logger.debug(f'Found {len(packages)} installed packages with full fields')
+            return packages
         else:
-            path_check=path_from+'/'+value
-            dbg('checking file ' + path_check)
-            return os.path.isfile(path_check)
-    elif typeparam == type(str()):
-        path_check=path_from+'/'+child
-        dbg('checking dir ' + path_check)
-        if not os.path.isdir(path_check):
-            return False
-    return True
+            output = check_output(
+                ['dpkg-query', '-W', '-f=${Package} ${Version}\n'],
+                stderr=DEVNULL
+            ).decode('utf-8')
 
-def store_result(results='',namevar='',action='store'):
-    global eval_mode
-    global result
-    global exit_return_code_mode
+            packages = []
+            for line in output.strip().split('\n'):
+                if not line.strip():
+                    continue
 
-    if action == 'init':
-        if eval_mode:
-            result={}
-            return 0
-        else:
-            result=[]
-            return 0
-    elif action == 'store':
-        if results=='':
-            raise Exception('Missing param results to store')
-        if eval_mode and namevar=='':
-            raise Exception('Eval mode need namevar param')
+                parts = line.split(None, 1)
+                if len(parts) == 2:
+                    packages.append((parts[0], parts[1]))
 
-        if eval_mode:
-            if namevar=='USERTYPE':
-                res=results
-                if res[0] == '*':
-                    result['PROMOTED_USER']='yes'
-                    res=results[1:]
-                else:
-                    result['PROMOTED_USER']='no'
-                result['USERNAME']=res.split('/')[0]
-                result['LOGIN_TYPE']=res.split('/')[1]
-            elif namevar=='SESSION_TYPE':
-                res=results.split(',')
-                result['LIVE']='no'
-                result['LTSP']='no'
-                result['THIN']='no'
-                result['SEMI']='no'
-                result['FAT']='no'
+            packages.sort(key=lambda x: x[0].lower())
 
-                if len(res) > 1:
-                    result['LIVE']='yes'
-                if res[0] != 'fat':
-                    result['LTSP']='yes'
+            logger.debug(f'Found {len(packages)} installed packages')
+            return packages
 
-                result[res[0].upper()]='yes'
-            elif namevar=='FLAVOUR':
-                res=results[-1]
-                result['SERVER']='no'
-                result['DESKTOP']='no'
-                result['CLIENT']='no'
-                result['INFANTIL']='no'
-                result['MUSIC']='no'
-                result['PIME']='no'
+    except Exception as e:
+        logger.error(f"Error getting package list with dpkg-query: {e}")
+        return []
 
-                #lliurex 15 specific options & catch all
-                if res.upper() == 'NETWORK-CLIENT-PROMO':
-                    result['CLIENT']='yes'
-                elif res.upper() == 'LLIUREX':
-                    if 'INFANTIL' in [ x.upper() for x in results ]:
-                        result['INFANTIL']='yes'
-                    else:
-                        result['DESKTOP']='yes'
-                #end lliurex15 specific options
-                elif 'CLIENT' in [ x.upper() for x in results ] and 'EDU' in [ x.upper() for x in results ]:
-                    result['CLIENT']='yes'
-                elif 'DESKTOP' in [ x.upper() for x in results ] and 'EDU' in [ x.upper() for x in results ]:
-                    result['DESKTOP']='yes'
-                elif '-LITE' in res.upper():
-                    part = res.split('-')
-                    if part and isinstance(part,list) and len(part) > 1:
-                        result[part[0].upper()]='yes'
-                else:
-                    result[res.upper()]='yes'
-            else:
-                result[namevar]=results
-                
-        else:
-            if type(list()) == type(results):
-                res=results[-1]
-            elif type(str()) == type(results):
-                res=results
-            else:
-                raise Exception('Unknown result type to store')
-            if namevar=='FLAVOUR':
-                #lliurex 15 specific options & catch all
-                if res.upper() == 'NETWORK-CLIENT-PROMO':
-                    res='client'
-                elif res.upper() == 'LLIUREX':
-                    if 'INFANTIL' in [ x.upper() for x in results ]:
-                        res='infantil'
-                    else:
-                        res='desktop'
-                #end lliurex15 specific options
-                elif 'CLIENT' in [ x.upper() for x in results ] and 'EDU' in [ x.upper() for x in results ]:
-                    res='client'
-                elif 'DESKTOP' in [ x.upper() for x in results ] and 'EDU' in [ x.upper() for x in results ]:
-                    res='desktop'
-            result.append(res)
-    elif action == 'print':
-        if exit_return_code_mode != False:
-            if exit_return_code_mode.upper() == 'LOCAL':
-                if result['LOGIN_TYPE']=='local':
-                    sys.exit(0)
-                else:
-                    sys.exit(1)
-            elif exit_return_code_mode.upper() == 'LDAP':
-                if result['LOGIN_TYPE']=='ldap':
-                    sys.exit(0)
-                else:
-                    sys.exit(1)
-            elif exit_return_code_mode.upper() == 'PROMOTED':
-                if result['PROMOTED_USER']=='yes':
-                    sys.exit(0)
-                else:
-                    sys.exit(1)
-            elif exit_return_code_mode.upper() == 'MIRROR':
-                if result['MIRROR']=='True':
-                    sys.exit(0)
-                else:
-                    sys.exit(1)
-            else:
-                if result[exit_return_code_mode.upper()]=='yes':
-                    sys.exit(0)
-                else:
-                    sys.exit(1)
-        if len(result) > 0:
-            if eval_mode:
-                for k,v in result.items():
-                    print(k+'='+v)
-            else:
-                print (','.join(result))
-    else:
-        raise Exception('Unknow action')
+def filter_packages(
+        packages: Union[List[Tuple[str, str]], List[Tuple[str, str, str, str, str, str]]], 
+        includes: List[re.Pattern], 
+        excludes: List[re.Pattern]
+    ) -> Union[List[Tuple[str, str]], List[Tuple[str, str, str, str, str, str]]]:
+    '''
+    Filter packages based on rules from files
+    '''
+    if not includes and not excludes:
+        return packages
 
+    filtered = []
 
-#def store_result():
+    for pkg_data in packages:
+        pkg_name = pkg_data[0]  # First element is always the package name
+        matches_include = any(pattern.search(pkg_name) for pattern in includes) if includes else False
+        matches_exclude = any(pattern.search(pkg_name) for pattern in excludes) if excludes else False
 
-
-#
-# MAIN PROGRAM
-#
-
-parser = argparse.ArgumentParser(description='Get information about running environment')
-parser.add_argument('-a','--all',metavar='',action='store_const',help='Get all information',const=True)
-parser.add_argument('-m','--mirror',metavar='',action='store_const',help='Check mirror available',const=True)
-parser.add_argument('-mv','--mirror-version',metavar='',action='store_const',help='Get mirror information',const=True)
-parser.add_argument('-e','--eval',metavar='',action='store_const',help='Show all information to evaluate in bash variables',const=True)
-parser.add_argument('-s','--session',metavar='',action='store_const',help='Get current session type',const=True)
-parser.add_argument('-f','--flavour',metavar='',action='store_const',help='Get the flavour of current system',const=True)
-parser.add_argument('-u','--usertype',metavar='username',nargs='?',const='',help='Get the usertype from current user or from passed username')
-code_types=['live','ltsp','fat','semi','thin','desktop','server','client','infantil','pime','music','local','ldap','promoted','mirror']
-parser.add_argument('-x','--with-return-code',metavar='[live|ltsp|fat|semi|thin|desktop|server|client|infantil|pime|music|local|ldap|promoted|mirror]',nargs=1,choices=code_types,help='Execute mode testing value passed')
-# lliurex-version options
-parser.add_argument('-n','--number',metavar='',action='store_const',const=True,help='Get the cdd number version')
-parser.add_argument('-v','--version',metavar='',action='store_const',const=True,help='Get the cdd version')
-parser.add_argument('-t','--test',metavar='cdd_name',help='Test if the cdd is installed')
-parser.add_argument('--history',metavar='',action='store_const',const=True,help='Get the installed meta\'s history')
-args=parser.parse_args()
-
-#print(args)
-
-args_all=args.all
-#Commented due to compatibility with lliurex-version without parameters
-#args_all=True
-#if args.all != True:
-#    for arg in vars(args):
-#        if getattr(args,arg) != None:
-#            args_all=False
-#            break
-arg_none_for_lliurex_version=True
-if args.all != True:
-    for arg in vars(args):
-        if getattr(args,arg) != None:
-            arg_none_for_lliurex_version=False
-            break
-else:
-    arg_none_for_lliurex_version=False
-
-eval_mode=args.eval
-
-exit_return_code_mode=False
-if args.with_return_code != None:
-    eval_mode=True
-    args_all=True
-    exit_return_code_mode=args.with_return_code[0]
-    
-
-store_result(action='init')
-
-try:
-    if args_all or args.session != None:
-        store_result(detect_type(),'SESSION_TYPE')
-    if args_all or args.flavour != None:
-        store_result(detect_flavour(),'FLAVOUR')
-    if args_all or args.usertype != None:
-        store_result(detect_user(args.usertype),'USERTYPE')
-    if args_all or args.mirror != None or args.mirror_version:
-        store_result(str(check_mirror()),'MIRROR')
-    if args_all or args.mirror_version != None:
-        check_mirror_timestamp_solved=check_mirror_timestamp()
-        store_result("MIRROR_VERSION_TIMESTAMP={}".format(check_mirror_timestamp_solved),'MIRROR_TIMESTAMP')
-        if check_mirror_timestamp_solved == 'No mirror done':
+        if matches_include and matches_exclude:
+            filtered.append(pkg_data)
+        elif matches_include:
+            filtered.append(pkg_data)
+        elif matches_exclude:
             pass
         else:
-            llxvar_mirror = check_mirror_llxvar()
-            if llxvar_mirror:
-                store_result("STATUS={status},PROGRESS={progress},SIZE={size},LAST_UPDATE_CHECK={last_update}".format(**llxvar_mirror),'MIRROR_LLXVAR')
+            filtered.append(pkg_data)
 
-#lliurex version options
-    if args.number != None:
-        print(detect_num_cdd())
-    if args.version != None:
-        print(', '.join(detect_flavour()))
-    if arg_none_for_lliurex_version:
-        ret=detect_flavour()
-        ret.append(detect_num_cdd())
-        print(', '.join(ret))
-    if args.test != None:
-        try:
-            ret=detect_flavour()
-        except:
-            sys.exit(1)
-        if args.test in ret:
-            sys.exit(0)
+    logger.debug(f"Filtered {len(packages)} packages to {len(filtered)}")
+    return filtered
+
+def list_packages(
+        includes_file: Optional[Path] = None, 
+        excludes_file: Optional[Path] = None, 
+        no_filter: bool = False, 
+        separator: str = ' ', 
+        full_fields: bool = False, 
+        package_prefix: str = ''
+    ) -> List[str]:
+    '''
+    List filtered installed packages
+    '''
+    packages = get_installed_packages(full_fields=full_fields)
+
+    if no_filter:
+        if full_fields:
+            if package_prefix:
+                result = [separator.join([f"{package_prefix}{pkg_data[0]}"] + list(pkg_data[1:])) for pkg_data in packages]
+            else:
+                result = [separator.join(pkg_data) for pkg_data in packages]
         else:
-            sys.exit(1)
-    if args.history != None:
-        print(get_history_version().rstrip())
-#end lliurex-version options
-    store_result(action='print')
-except Exception as e:
-    print('Error '+str(e))
-    sys.exit(1)
+            result = [f'{package_prefix}{name}{separator}{version}' for name, version in packages]
+        return result
 
-sys.exit(0)
+    if includes_file is None:
+        includes_file = _find_filter_file(INCLUDES_FILE_PATHS)
+
+    if excludes_file is None:
+        excludes_file = _find_filter_file(EXCLUDES_FILE_PATHS)
+
+    includes = _read_filter_file(includes_file) if includes_file else []
+    excludes = _read_filter_file(excludes_file) if excludes_file else []
+
+    filtered = filter_packages(packages, includes, excludes)
+
+    if full_fields:
+        if package_prefix:
+            result = [separator.join([f"{package_prefix}{pkg_data[0]}"] + list(pkg_data[1:])) for pkg_data in filtered]
+        else:
+            result = [separator.join(pkg_data) for pkg_data in filtered]
+    else:
+        result = [f'{package_prefix}{name}{separator}{version}' for name, version in filtered]
+
+    return result
+
+def get_tags() -> List[str]:
+    '''
+    Get system tags from lliurex-auto-upgrade dir (without filtering)
+    '''
+    try:
+        if not TAGS_DIRECTORY.exists():
+            logger.warning(f'Tags directory not found: {TAGS_DIRECTORY}')
+            return []
+
+        if not TAGS_DIRECTORY.is_dir():
+            logger.error(f'Tags path is not a directory: {TAGS_DIRECTORY}')
+            return []
+
+        tags = []
+        for item in TAGS_DIRECTORY.iterdir():
+            if item.is_file():
+                tags.append(item.name)
+
+        tags.sort(key=str.lower)
+
+        logger.debug(f'Found {len(tags)} tags')
+        return tags
+
+    except Exception as e:
+        logger.error(f'Error reading tags directory: {e}')
+        return []
+
+def filter_tags(tags: List[str], includes: List[re.Pattern], excludes: List[re.Pattern]) -> List[str]:
+    '''
+    Filter tags based on rules from files
+    '''
+    if not includes and not excludes:
+        return tags
+
+    filtered = []
+
+    for tag in tags:
+        matches_include = any(pattern.search(tag) for pattern in includes) if includes else False
+        matches_exclude = any(pattern.search(tag) for pattern in excludes) if excludes else False
+
+        if matches_include and matches_exclude:
+            filtered.append(tag)
+        elif matches_include:
+            filtered.append(tag)
+        elif matches_exclude:
+            pass
+        else:
+            filtered.append(tag)
+
+    logger.debug(f"Filtered {len(tags)} tags to {len(filtered)}")
+    return filtered
+
+def list_tags(
+        include_tags_file: Optional[Path] = None, 
+        exclude_tags_file: Optional[Path] = None, 
+        no_filter: bool = False, 
+        separator: str = ' ', 
+        full_fields: bool = False, 
+        tag_prefix: str = ''
+    ) -> List[str]:
+    '''
+    List filtered system tags
+    '''
+    tags = get_tags()
+
+    if no_filter:
+        filtered = tags
+    else:
+        if include_tags_file is None:
+            include_tags_file = _find_filter_file(INCLUDE_TAGS_FILE_PATHS)
+
+        if exclude_tags_file is None:
+            exclude_tags_file = _find_filter_file(EXCLUDE_TAGS_FILE_PATHS)
+
+        includes = _read_filter_file(include_tags_file) if include_tags_file else []
+        excludes = _read_filter_file(exclude_tags_file) if exclude_tags_file else []
+
+        filtered = filter_tags(tags, includes, excludes)
+
+    if full_fields:
+        version_full = detect_num_cdd()
+        version_short = version_full.split('.')[0] if '.' in version_full else version_full
+
+        # 6 cols: {tag}, "all", {version}, "1", "llxtag", "install ok installed"
+        result = []
+        for tag in filtered:
+            prefixed_tag = f'{tag_prefix}{tag}'
+            formatted_tag = f'{prefixed_tag}{separator}all{separator}{version_short}{separator}1{separator}llxtag{separator}install ok installed'
+            result.append(formatted_tag)
+        return result
+    else:
+        if tag_prefix:
+            return [f'{tag_prefix}{tag}' for tag in filtered]
+        return filtered
+
+def list_packages_and_tags(
+    includes_file: Optional[Path] = None,
+    excludes_file: Optional[Path] = None,
+    include_tags_file: Optional[Path] = None,
+    exclude_tags_file: Optional[Path] = None,
+    tag_prefix: str = DEFAULT_TAG_PREFIX,
+    package_prefix: str = DEFAULT_PACKAGE_PREFIX,
+    no_filter: bool = False,
+    package_separator: str = ' ',
+    full_fields: bool = False
+    ) -> List[str]:
+    '''
+    List both tags and packages with optional prefix
+    '''
+    tags = list_tags(include_tags_file, exclude_tags_file, no_filter, package_separator, full_fields, tag_prefix)
+    packages = list_packages(includes_file, excludes_file, no_filter, package_separator, full_fields, package_prefix)
+
+    result = tags + packages
+
+    return result
+
+# Global state for result storage
+eval_mode: bool = False
+result: Union[Dict[str, str], List[str]] = []
+exit_return_code_mode: Union[bool, str] = False
+
+def initialize_result() -> None:
+    '''Initialize the result storage based on eval mode.'''
+    global result
+    if eval_mode:
+        result = {}
+    else:
+        result = []
+
+def _normalize_flavour_for_eval(results: List[str]) -> None:
+    '''
+    Store flavour results in eval mode with normalized keys.
+    '''
+    global result
+
+    res = results[-1]
+    result['SERVER'] = 'no'
+    result['DESKTOP'] = 'no'
+    result['CLIENT'] = 'no'
+    result['INFANTIL'] = 'no'
+    result['MUSIC'] = 'no'
+    result['PIME'] = 'no'
+
+    # DEPRECATED: LliureX 15 specific options & catch all
+    if res.upper() == 'NETWORK-CLIENT-PROMO':
+        result['CLIENT'] = 'yes'
+    elif res.upper() == 'LLIUREX':
+        if 'INFANTIL' in [x.upper() for x in results]:
+            result['INFANTIL'] = 'yes'
+        else:
+            result['DESKTOP'] = 'yes'
+    # DEPRECATED: End LliureX 15 specific options
+
+    elif 'CLIENT' in [x.upper() for x in results] and 'EDU' in [x.upper() for x in results]:
+        result['CLIENT'] = 'yes'
+    elif 'DESKTOP' in [x.upper() for x in results] and 'EDU' in [x.upper() for x in results]:
+        result['DESKTOP'] = 'yes'
+    elif '-LITE' in res.upper():
+        parts = res.split('-')
+        if parts and isinstance(parts, list) and len(parts) > 1:
+            result[parts[0].upper()] = 'yes'
+    else:
+        result[res.upper()] = 'yes'
+
+def _normalize_flavour_for_list(results: Union[List[str], str]) -> str:
+    '''
+    Normalize flavour results for list mode output.
+    '''
+    if isinstance(results, list):
+        res = results[-1]
+        results_upper = [x.upper() for x in results]
+    else:
+        res = results
+        results_upper = [results.upper()]
+
+    # LliureX 15 specific options & catch all
+    if res.upper() == 'NETWORK-CLIENT-PROMO':
+        return 'client'
+    elif res.upper() == 'LLIUREX':
+        if 'INFANTIL' in results_upper:
+            return 'infantil'
+        else:
+            return 'desktop'
+    # End LliureX 15 specific options
+    elif 'CLIENT' in results_upper and 'EDU' in results_upper:
+        return 'client'
+    elif 'DESKTOP' in results_upper and 'EDU' in results_upper:
+        return 'desktop'
+
+    return res
+
+def store_session_type(session_type: str) -> None:
+    '''
+    Store session type results.
+    '''
+    global result
+
+    if eval_mode:
+        session_parts = session_type.split(',')
+        result['LIVE'] = 'no'
+        result['LTSP'] = 'no'
+        result['THIN'] = 'no'
+        result['SEMI'] = 'no'
+        result['FAT'] = 'no'
+
+        if len(session_parts) > 1:
+            result['LIVE'] = 'yes'
+
+        if session_parts[0] != 'fat':
+            result['LTSP'] = 'yes'
+
+        result[session_parts[0].upper()] = 'yes'
+    else:
+        result.append(session_type)
+
+def store_flavour(flavour_list: List[str]) -> None:
+    '''
+    Store flavour results.
+    '''
+    global result
+
+    if eval_mode:
+        _normalize_flavour_for_eval(flavour_list)
+    else:
+        res = _normalize_flavour_for_list(flavour_list)
+        result.append(res)
+
+def store_usertype(usertype: str) -> None:
+    '''
+    Store user type results.
+    '''
+    global result
+
+    if eval_mode:
+        if usertype[0] == '*':
+            result['PROMOTED_USER'] = 'yes'
+            usertype = usertype[1:]
+        else:
+            result['PROMOTED_USER'] = 'no'
+
+        parts = usertype.split('/')
+        result['USERNAME'] = parts[0]
+        result['LOGIN_TYPE'] = parts[1]
+    else:
+        result.append(usertype)
+
+def store_generic(value: str, namevar: str) -> None:
+    '''
+    Store generic results.
+    '''
+    global result
+
+    if eval_mode:
+        result[namevar] = value
+    else:
+        result.append(value)
+
+def print_results() -> None:
+    '''Print stored results and exit with appropriate code.'''
+    global result, exit_return_code_mode
+
+    if exit_return_code_mode:
+        mode_upper = exit_return_code_mode.upper()
+
+        if mode_upper == 'LOCAL':
+            sys.exit(0 if result.get('LOGIN_TYPE') == 'local' else 1)
+        elif mode_upper == 'LDAP':
+            sys.exit(0 if result.get('LOGIN_TYPE') == 'ldap' else 1)
+        elif mode_upper == 'PROMOTED':
+            sys.exit(0 if result.get('PROMOTED_USER') == 'yes' else 1)
+        elif mode_upper == 'MIRROR':
+            sys.exit(0 if result.get('MIRROR') == 'True' else 1)
+        else:
+            sys.exit(0 if result.get(mode_upper) == 'yes' else 1)
+
+    if len(result) > 0:
+        if eval_mode:
+            for k, v in result.items():
+                print(f'{k}={v}')
+        else:
+            print(','.join(result))
+
+def main() -> None:
+    global eval_mode, exit_return_code_mode
+
+    parser = argparse.ArgumentParser(
+        description='Get information about running environment'
+    )
+    parser.add_argument(
+        '-a', '--all',
+        action='store_const',
+        const=True,
+        help='Get all information'
+    )
+    parser.add_argument(
+        '-m', '--mirror',
+        action='store_const',
+        const=True,
+        help='Check mirror available'
+    )
+    parser.add_argument(
+        '-mv', '--mirror-version',
+        action='store_const',
+        const=True,
+        help='Get mirror information'
+    )
+    parser.add_argument(
+        '-e', '--eval',
+        action='store_const',
+        const=True,
+        help='Show all information to evaluate in bash variables'
+    )
+    parser.add_argument(
+        '-s', '--session',
+        action='store_const',
+        const=True,
+        help='Get current session type'
+    )
+    parser.add_argument(
+        '-f', '--flavour',
+        action='store_const',
+        const=True,
+        help='Get the flavour of current system'
+    )
+    parser.add_argument(
+        '-u', '--usertype',
+        metavar='username',
+        nargs='?',
+        const='',
+        help='Get the usertype from current user or from passed username'
+    )
+    code_types = ['live', 'ltsp', 'fat', 'semi', 'thin','desktop', 'server', 'client', 'infantil', 'pime', 'music','local', 'ldap', 'promoted', 'mirror']
+    parser.add_argument(
+        '-x', '--with-return-code',
+        metavar='TYPE',
+        nargs=1,
+        choices=code_types,
+        help='Execute mode testing value passed'
+    )
+    parser.add_argument(
+        '-n', '--number',
+        action='store_const',
+        const=True,
+        help='Get the cdd number version'
+    )
+    parser.add_argument(
+        '-v', '--version',
+        action='store_const',
+        const=True,
+        help='Get the cdd version'
+    )
+    parser.add_argument(
+        '-t', '--test',
+        metavar='cdd_name',
+        help='Test if the cdd is installed'
+    )
+    parser.add_argument(
+        '--history',
+        action='store_const',
+        const=True,
+        help='Get the installed meta\'s history'
+    )
+    parser.add_argument(
+        '-p', '--packages',
+        action='store_const',
+        const=True,
+        help='List filtered installed packages'
+    )
+    parser.add_argument(
+        '-g', '--tags',
+        action='store_const',
+        const=True,
+        help='List system tags'
+    )
+    parser.add_argument(
+        '-pg', '--packages-and-tags',
+        action='store_const',
+        const=True,
+        help='List prefixed tags and packages (equivalent to: -p -g, -g -p, -gp)'
+    )
+    parser.add_argument(
+        '--includes-file',
+        type=Path,
+        metavar='FILE',
+        help='Path to includes filter file (default: ./includes or /etc/lliurex-version/includes)'
+    )
+    parser.add_argument(
+        '--excludes-file',
+        type=Path,
+        metavar='FILE',
+        help='Path to excludes filter file (default: ./excludes or /etc/lliurex-version/excludes)'
+    )
+    parser.add_argument(
+        '--include-tags-file',
+        type=Path,
+        metavar='FILE',
+        help='Path to include-tags filter file (default: ./include-tags or /etc/lliurex-version/include-tags)'
+    )
+    parser.add_argument(
+        '--exclude-tags-file',
+        type=Path,
+        metavar='FILE',
+        help='Path to exclude-tags filter file (default: ./exclude-tags or /etc/lliurex-version/exclude-tags)'
+    )
+    parser.add_argument(
+        '--tag-prefix',
+        type=str,
+        default=DEFAULT_TAG_PREFIX,
+        metavar='PREFIX',
+        help=f'Prefix for tags in combined listing (default: "{DEFAULT_TAG_PREFIX}")'
+    )
+    package_prefix_default = 'none (empty)' if not DEFAULT_PACKAGE_PREFIX else f'"{DEFAULT_PACKAGE_PREFIX}"'
+    parser.add_argument(
+        '--package-prefix',
+        type=str,
+        default=DEFAULT_PACKAGE_PREFIX,
+        metavar='PREFIX',
+        help=f'Prefix for packages in combined listing (default: {package_prefix_default})'
+    )
+    parser.add_argument(
+        '--package-separator',
+        type=str,
+        default=' ',
+        metavar='SEPARATOR',
+        help='Separator for package listings (default: " ").'
+    )
+    parser.add_argument(
+        '-ff', '--full-fields',
+        action='store_true',
+        dest='full_fields',
+        help='Show full package information (Package, Architecture, Version, Installed-Size, Section, Status)'
+    )
+    parser.add_argument(
+        '-N', '--no-filter',
+        action='store_true',
+        dest='no_filter',
+        help='Disable all filtering (ignore includes/excludes files for packages and tags)'
+    )
+    parser.add_argument(
+        '--glpi',
+        action='store_true',
+        dest='glpi',
+        help='GLPI inventory format preset (sets: -ff --package-separator \'\\t\' --tag-prefix \'llxtag_\'). Use with -p, -g, or -pg'
+    )
+    args = parser.parse_args()
+
+    if args.glpi:
+        args.full_fields = True
+        args.package_separator = '\t'
+        args.tag_prefix = 'llxtag_'
+
+    package_separator = args.package_separator
+    # maybe is escaped
+    package_separator = package_separator.replace('\\t', '\t')
+    package_separator = package_separator.replace('\\n', '\n')
+    package_separator = package_separator.replace('\\r', '\r')
+    package_separator = package_separator.replace('\\\\', '\\')
+
+    # if called whitout arguments print flavour,cddnumber
+    arg_none_for_lliurex_version = True
+    if args.all:
+        arg_none_for_lliurex_version = False
+    else:
+        action_args = ['mirror', 'mirror_version', 'eval', 'session', 'flavour', 'usertype',
+                       'with_return_code', 'number', 'version', 'test', 'history',
+                       'packages', 'tags', 'packages_and_tags', 'includes_file', 'excludes_file']
+        for arg in action_args:
+            if getattr(args, arg, None) is not None:
+                arg_none_for_lliurex_version = False
+                break
+
+    eval_mode = args.eval or False
+
+    args_all = args.all
+    exit_return_code_mode = False
+    if args.with_return_code:
+        eval_mode = True
+        args_all = True
+        exit_return_code_mode = args.with_return_code[0]
+
+    initialize_result()
+
+    try:
+        if args_all or args.session:
+            store_session_type(detect_type())
+
+        if args_all or args.flavour:
+            store_flavour(detect_flavour())
+
+        if args_all or args.usertype is not None:
+            store_usertype(detect_user(args.usertype))
+
+        if args_all or args.mirror or args.mirror_version:
+            store_generic(str(check_mirror()), 'MIRROR')
+
+        if args_all or args.mirror_version:
+            check_mirror_timestamp_solved = check_mirror_timestamp()
+            store_generic(
+                f'MIRROR_VERSION_TIMESTAMP={check_mirror_timestamp_solved}',
+                'MIRROR_TIMESTAMP'
+            )
+
+            if check_mirror_timestamp_solved not in ('No mirror done', 'Error'):
+                llxvar_mirror = check_mirror_llxvar()
+                if llxvar_mirror:
+                    store_generic(
+                        f"STATUS={llxvar_mirror['status']},"
+                        f"PROGRESS={llxvar_mirror['progress']},"
+                        f"SIZE={llxvar_mirror['size']},"
+                        f"LAST_UPDATE_CHECK={llxvar_mirror['last_update']}",
+                        'MIRROR_LLXVAR'
+                    )
+
+        if args.number:
+            print(detect_num_cdd())
+
+        if args.version:
+            print(', '.join(detect_flavour()))
+
+        if arg_none_for_lliurex_version:
+            ret = detect_flavour()
+            ret.append(detect_num_cdd())
+            print(', '.join(ret))
+
+        if args.test:
+            try:
+                ret = detect_flavour()
+            except Exception:
+                sys.exit(1)
+
+            sys.exit(0 if args.test in ret else 1)
+
+        if args.history:
+            print(get_history_version().rstrip())
+
+        if args.packages and args.tags and not args.packages_and_tags:
+            combined = list_packages_and_tags(
+                args.includes_file,
+                args.excludes_file,
+                args.include_tags_file,
+                args.exclude_tags_file,
+                args.tag_prefix,
+                args.package_prefix,
+                args.no_filter,
+                package_separator,
+                args.full_fields
+            )
+            for item in combined:
+                print(item)
+        else:
+            if args.packages:
+                packages = list_packages(args.includes_file, args.excludes_file, args.no_filter, package_separator, args.full_fields, args.package_prefix)
+                for pkg in packages:
+                    print(pkg)
+
+            if args.tags:
+                tags = list_tags(args.include_tags_file, args.exclude_tags_file, args.no_filter, package_separator, args.full_fields, args.tag_prefix)
+                for tag in tags:
+                    print(tag)
+
+        if args.packages_and_tags:
+            combined = list_packages_and_tags(
+                args.includes_file,
+                args.excludes_file,
+                args.include_tags_file,
+                args.exclude_tags_file,
+                args.tag_prefix,
+                args.package_prefix,
+                args.no_filter,
+                package_separator,
+                args.full_fields
+            )
+            for item in combined:
+                print(item)
+
+        print_results()
+
+    except (NotLiveSystemError, CDDDetectionError, UserNotFoundError, MirrorError) as e:
+        logger.error(str(e))
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f'Unexpected error: {e}')
+        sys.exit(1)
+
+    sys.exit(0)
+
+
+if __name__ == '__main__':
+    main()

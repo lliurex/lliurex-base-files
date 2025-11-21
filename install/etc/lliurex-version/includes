@@ -1,0 +1,14 @@
+# Format:
+#   - One regex pattern per line
+#   - Lines starting with # are comments (ignored)
+#   - Empty lines are ignored
+#   - Patterns are matched against package names using Python regex
+#
+# Note:
+#   If a package matches includes and excludes, includes take priority
+#
+
+# Include all lliurex-meta packages
+^lliurex-meta.*
+
+

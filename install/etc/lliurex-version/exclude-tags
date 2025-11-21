@@ -1,0 +1,13 @@
+# Format:
+#   - One regex pattern per line
+#   - Lines starting with # are comments (ignored)
+#   - Empty lines are ignored
+#   - Patterns are matched against package names using Python regex
+#
+# Priority:
+#   If a package matches includes and excludes, includes takes priority
+#
+
+# Exclude all tags
+^.*$
+
